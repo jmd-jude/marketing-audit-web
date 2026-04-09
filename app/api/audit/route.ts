@@ -34,6 +34,32 @@ interface PageSpeedData {
   error?: string
 }
 
+async function fetchRobotsAndSitemap(url: string): Promise<string> {
+  try {
+    const origin = new URL(url).origin
+    const [robotsRes, sitemapRes] = await Promise.allSettled([
+      fetch(`${origin}/robots.txt`, { signal: AbortSignal.timeout(5000) }),
+      fetch(`${origin}/sitemap.xml`, { signal: AbortSignal.timeout(5000) }),
+    ])
+
+    const parts: string[] = []
+
+    if (robotsRes.status === 'fulfilled' && robotsRes.value.ok) {
+      const text = await robotsRes.value.text()
+      parts.push(`## robots.txt\n${text.slice(0, 2000)}`)
+    }
+
+    if (sitemapRes.status === 'fulfilled' && sitemapRes.value.ok) {
+      const text = await sitemapRes.value.text()
+      parts.push(`## sitemap.xml (truncated)\n${text.slice(0, 2000)}`)
+    }
+
+    return parts.join('\n\n')
+  } catch {
+    return ''
+  }
+}
+
 async function fetchPageContent(url: string): Promise<string> {
   try {
     const response = await fetch(url, {
@@ -41,7 +67,11 @@ async function fetchPageContent(url: string): Promise<string> {
       signal: AbortSignal.timeout(10000),
     })
     const html = await response.text()
-    return html.slice(0, 15000)
+    const stripped = html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
+    return stripped.slice(0, 15000)
   } catch {
     return `Unable to fetch page content from ${url}. Analyze based on URL structure and domain name alone.`
   }
@@ -271,23 +301,24 @@ export async function GET(request: Request) {
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
       // Fetch HTML and PageSpeed in parallel
-      const [pageContent, pageSpeed] = await Promise.all([
+      const [pageContent, pageSpeed, crawlData] = await Promise.all([
         fetchPageContent(targetUrl),
         fetchPageSpeed(targetUrl),
+        fetchRobotsAndSitemap(targetUrl),
       ])
 
       send({
         type: 'fetched',
-        message: `Page fetched${pageSpeed ? ' + PageSpeed data ✓' : ''}. Launching 5 parallel agents...`,
+        message: `Page fetched${pageSpeed ? ' + PageSpeed data ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}. Launching 5 parallel agents...`,
         pageSpeed,
       })
 
       const agentKeys: AgentKey[] = ['content', 'conversion', 'competitive', 'technical', 'strategy']
 
       const promises = agentKeys.map(async (key) => {
-        // Only pass PageSpeed context to the technical agent
-        const additionalContext = (key === 'technical' && pageSpeed)
-          ? formatPageSpeedContext(pageSpeed)
+        // Only pass PageSpeed + crawl data to the technical agent
+        const additionalContext = key === 'technical'
+          ? [pageSpeed ? formatPageSpeedContext(pageSpeed) : null, crawlData || null].filter(Boolean).join('\n\n') || undefined
           : undefined
 
         try {

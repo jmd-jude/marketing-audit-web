@@ -29,6 +29,88 @@ const COLOR_MAP: Record<string, { bg: string; border: string; badge: string; dot
   red:    { bg: 'bg-red-50',    border: 'border-red-200',   badge: 'bg-red-100 text-red-800',      dot: 'bg-red-500'    },
 }
 
+function generateMarkdownReport(
+  auditUrl: string,
+  compositeScore: number,
+  agentStates: AgentResults,
+  usageStats: UsageStats,
+  auditModel: string,
+  durationSec: number,
+): string {
+  const lines: string[] = []
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  lines.push('# Marketing Audit Report')
+  lines.push(`**URL:** ${auditUrl}  `)
+  lines.push(`**Date:** ${date}  `)
+  lines.push(`**Overall Score:** ${compositeScore}/100 — ${scoreLabel(compositeScore)}  `)
+  lines.push(`**Model:** ${auditModel} | **Duration:** ${durationSec}s | **Tokens:** ${usageStats.totalTokens.toLocaleString()}`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+
+  for (const agent of AGENTS) {
+    const state = agentStates[agent.key]
+    if (!state || state.status !== 'complete') continue
+    const result = state.result as AnyResult
+
+    lines.push(`## ${agent.label}`)
+    lines.push(`**Score:** ${state.score}/100 — ${scoreLabel(state.score!)} | **Weight:** ${Math.round(agent.weight * 100)}% of overall`)
+    lines.push('')
+
+    if (Array.isArray(result.dimensions)) {
+      lines.push('### Dimension Scores')
+      for (const d of result.dimensions as Array<{ name: string; score: number; finding: string }>) {
+        lines.push(`- **${d.name}** (${d.score}/10): ${d.finding}`)
+      }
+      lines.push('')
+    }
+
+    if (Array.isArray(result.wins) && result.wins.length > 0) {
+      lines.push('### Wins')
+      for (const w of result.wins as string[]) lines.push(`- ${w}`)
+      lines.push('')
+    }
+
+    if (Array.isArray(result.critical_fixes) && result.critical_fixes.length > 0) {
+      lines.push('### Critical Fixes')
+      for (const f of result.critical_fixes as string[]) lines.push(`- ${f}`)
+      lines.push('')
+    }
+
+    if (Array.isArray(result.quick_wins) && result.quick_wins.length > 0) {
+      lines.push('### Quick Wins')
+      for (const w of result.quick_wins as string[]) lines.push(`- ${w}`)
+      lines.push('')
+    }
+
+    if (Array.isArray(result.seo_quick_wins) && result.seo_quick_wins.length > 0) {
+      lines.push('### SEO Quick Wins')
+      for (const w of result.seo_quick_wins as string[]) lines.push(`- ${w}`)
+      lines.push('')
+    }
+
+    if (result.biggest_lever) {
+      lines.push('### Biggest Growth Lever')
+      lines.push(result.biggest_lever as string)
+      lines.push('')
+    }
+
+    if (Array.isArray(result.opportunities) && result.opportunities.length > 0) {
+      lines.push('### Opportunities')
+      for (const o of result.opportunities as Array<{ title: string; description: string }>) {
+        lines.push(`- **${o.title}:** ${o.description}`)
+      }
+      lines.push('')
+    }
+
+    lines.push('---')
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
 function scoreColor(score: number) {
   if (score >= 75) return 'text-green-600'
   if (score >= 55) return 'text-yellow-600'
@@ -356,6 +438,19 @@ export default function Home() {
     }
   }
 
+  const downloadReport = () => {
+    if (compositeScore === null || !usageStats || durationSec === null) return
+    const auditUrl = url.startsWith('http') ? url : `https://${url}`
+    const md = generateMarkdownReport(auditUrl, compositeScore, agentStates, usageStats, auditModel, durationSec)
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    const hostname = new URL(auditUrl).hostname.replace(/^www\./, '')
+    a.download = `marketing-audit-${hostname}.md`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const reset = () => {
     abortRef.current?.abort()
     setPhase('idle')
@@ -505,12 +600,17 @@ export default function Home() {
                 <span>↑ {usageStats.inputTokens.toLocaleString()} in</span>
                 <span>↓ {usageStats.outputTokens.toLocaleString()} out</span>
                 <span>Σ {usageStats.totalTokens.toLocaleString()} tokens</span>
-                <span className="text-green-400 font-medium">~${usageStats.estimatedCostUsd.toFixed(4)}</span>
               </div>
             )}
 
             {phase === 'done' && (
-              <div className="text-center pt-2">
+              <div className="flex justify-center gap-3 pt-2">
+                <button
+                  onClick={downloadReport}
+                  className="bg-white/10 hover:bg-white/20 text-white text-sm px-6 py-2.5 rounded-xl transition-colors"
+                >
+                  Download Report (.md)
+                </button>
                 <button
                   onClick={reset}
                   className="bg-white/10 hover:bg-white/20 text-white text-sm px-6 py-2.5 rounded-xl transition-colors"
