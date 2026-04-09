@@ -473,7 +473,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-white font-bold text-lg tracking-tight">Marketing Intelligence</h1>
-            <p className="text-slate-400 text-xs">5 parallel AI agents · Full-spectrum analysis</p>
+            <p className="text-slate-400 text-xs">5 parallel agents · Full-spectrum analysis</p>
           </div>
           {phase !== 'idle' && (
             <button
@@ -494,7 +494,7 @@ export default function Home() {
                 Full Marketing Audit
               </h2>
               <p className="text-slate-400 text-xl max-w-xl mx-auto leading-relaxed">
-                Enter any website. Five AI specialists analyze content, conversion, SEO, competitive positioning, and brand strategy — all at once.
+                Enter any website. Five specialists analyze content, conversion, SEO, competitive positioning, and brand strategy — all at once.
               </p>
             </div>
 
