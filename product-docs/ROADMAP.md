@@ -18,9 +18,9 @@
   Publicly accessible API. Show whether the site is running paid social, rough creative direction, ad volume signals. No auth needed. Adds a "Paid Media" dimension to the audit.
   _Effort: S | Impact: M_
 
-- [ ] **Downloadable report** (Markdown or PDF)
+- [x] **Downloadable report** (Markdown)
   Client-side generation from audit state. Strong pitch closer — hand the client a file at the end of the screen share.
-  _Effort: S | Impact: H_
+  _Status: Shipped — downloads as `marketing-audit-{domain}.md`_
 
 - [ ] **`robots.txt` + `sitemap.xml` fetch**
   Pull these directly alongside the homepage HTML. Gives the technical agent real crawlability data instead of inference.
@@ -68,6 +68,26 @@
 
 ---
 
+### Analysis Quality
+
+- [ ] **Multi-page crawl**
+  Currently fetches homepage only. Parse nav links from homepage HTML, identify up to 3–4 interior pages by URL pattern (about, services, pricing, contact), fetch at reduced truncation (~3–4k chars each). Route different page combinations to different agents — not every agent needs every page. Watch token costs: each additional page amplifies across all 5 parallel calls.
+  _Effort: M | Impact: H_
+
+---
+
+### Access & Monetization
+
+- [ ] **Invite code + run limit**
+  Invite code field on landing page — valid codes in env var, checked server-side. Code stored in localStorage so re-entry isn't required. Each audit increments a localStorage counter; at N runs (e.g. 5) show a "complimentary audits used" message with a contact/upgrade CTA. Counter is bypassable but sufficient for demo-stage metering — anyone motivated enough to clear localStorage is a warm lead.
+  _Effort: S | Impact: M_
+
+- [ ] **Stripe paywall**
+  Natural successor to the run limit. Stripe Payment Link (no-code) for an audit pack (e.g. 10 audits / $49). On checkout success, issue a redemption token to localStorage and lift the gate. No backend payment logic required — Stripe hosts the checkout page.
+  _Effort: M | Impact: H (commercial)_
+
+---
+
 ### UX / Product
 
 - [ ] **Saved audit history** (localStorage or DB)
@@ -78,10 +98,9 @@
   Run the same audit on a competitor URL and display results in parallel columns. Natural upsell conversation starter.
   _Effort: M | Impact: H_
 
-- [ ] **Data sources panel in UI**
+- [x] **Data sources panel in UI**
   Show what's connected vs. available per audit. Visual representation of the tier model — makes the upsell implicit.
-  _Effort: S | Impact: H (pitch value)_
-  _Status: In progress_
+  _Status: Shipped — `DataSourcesPanel.tsx`, shows Active / Available / Roadmap sections with connect modals_
 
 - [ ] **Model selector toggle**
   Let agency staff switch between Haiku (fast/cheap), Sonnet (default), Opus (deep analysis) from the UI.

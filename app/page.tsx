@@ -14,6 +14,17 @@ interface AgentState {
 
 type AgentResults = Record<string, AgentState>
 
+interface PageMetadata {
+  title: string | null
+  metaDescription: string | null
+  canonical: string | null
+  h1s: string[]
+  wordCount: number
+  hasStructuredData: boolean
+  hasOgTags: boolean
+  metaRobots: string | null
+}
+
 interface UsageStats {
   inputTokens: number
   outputTokens: number
@@ -337,8 +348,78 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
   )
 }
 
+function DataInputsPanel({ metadata }: { metadata: PageMetadata }) {
+  const [expanded, setExpanded] = useState(true)
+
+  const pill = (active: boolean, label: string) => (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${
+      active ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-[#F0EDE8] border-[#E8E4DC] text-[#9C9690]'
+    }`}>
+      {active ? '✓' : '✗'} {label}
+    </span>
+  )
+
+  return (
+    <div className="bg-white rounded-lg border border-[#E8E4DC] overflow-hidden">
+      <div
+        className="px-5 py-3.5 flex items-center justify-between cursor-pointer select-none"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest">Data Inputs</div>
+        <span className="text-[#C4BFB8] text-xs">{expanded ? '▲' : '▼'}</span>
+      </div>
+
+      {expanded && (
+        <div className="px-5 pb-5 border-t border-[#F0EDE8] pt-4 space-y-3">
+          {metadata.title && (
+            <div>
+              <div className="text-xs text-[#9C9690] mb-0.5">Page Title</div>
+              <div className="text-xs text-[#1A1918] font-medium">{metadata.title}</div>
+            </div>
+          )}
+          {metadata.metaDescription && (
+            <div>
+              <div className="text-xs text-[#9C9690] mb-0.5">Meta Description</div>
+              <div className="text-xs text-[#3D3936] leading-relaxed">{metadata.metaDescription}</div>
+            </div>
+          )}
+          {metadata.h1s.length > 0 && (
+            <div>
+              <div className="text-xs text-[#9C9690] mb-0.5">H1 Heading{metadata.h1s.length > 1 ? 's' : ''}</div>
+              {metadata.h1s.map((h, i) => (
+                <div key={i} className="text-xs text-[#1A1918] font-medium">{h}</div>
+              ))}
+            </div>
+          )}
+          {metadata.canonical && (
+            <div>
+              <div className="text-xs text-[#9C9690] mb-0.5">Canonical URL</div>
+              <div className="text-xs text-[#6B6560] font-mono break-all">{metadata.canonical}</div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 flex-wrap pt-1">
+            <div className="text-xs text-[#9C9690]">~{metadata.wordCount.toLocaleString()} words</div>
+            {metadata.metaRobots && (
+              <div className="text-xs text-[#9C9690]">robots: <span className="text-[#6B6560]">{metadata.metaRobots}</span></div>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {pill(metadata.hasStructuredData, 'Structured Data')}
+            {pill(metadata.hasOgTags, 'OG Tags')}
+            {pill(metadata.canonical !== null, 'Canonical')}
+            {pill(metadata.metaDescription !== null, 'Meta Description')}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const [url, setUrl] = useState('')
+  const [name, setName] = useState('')
+  const [company, setCompany] = useState('')
+  const [pageMetadata, setPageMetadata] = useState<PageMetadata | null>(null)
   const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [agentStates, setAgentStates] = useState<AgentResults>({})
@@ -363,7 +444,7 @@ export default function Home() {
     abortRef.current = new AbortController()
 
     try {
-      const res = await fetch(`/api/audit?url=${encodeURIComponent(targetUrl)}`, {
+      const res = await fetch(`/api/audit?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}`, {
         signal: abortRef.current.signal,
       })
       if (!res.ok || !res.body) throw new Error('API error')
@@ -385,7 +466,10 @@ export default function Home() {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6))
-            if (event.type === 'start' || event.type === 'fetched') setStatusMsg(event.message)
+            if (event.type === 'start' || event.type === 'fetched') {
+              setStatusMsg(event.message)
+              if (event.type === 'fetched' && event.metadata) setPageMetadata(event.metadata)
+            }
             if (event.type === 'agent_complete') {
               setAgentStates((prev) => ({
                 ...prev,
@@ -435,6 +519,9 @@ export default function Home() {
     setAuditModel('')
     setDurationSec(null)
     setUrl('')
+    setName('')
+    setCompany('')
+    setPageMetadata(null)
   }
 
   const completedAgents = Object.values(agentStates).filter((a) => a.status === 'complete').length
@@ -472,6 +559,22 @@ export default function Home() {
             </div>
 
             <div className="max-w-lg mx-auto space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  className="rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
+                />
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="Company (optional)"
+                  className="rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
+                />
+              </div>
               <div className="flex gap-3">
                 <input
                   type="text"
@@ -483,7 +586,7 @@ export default function Home() {
                 />
                 <button
                   onClick={startAudit}
-                  disabled={!url.trim()}
+                  disabled={!url.trim() || !name.trim()}
                   className="bg-[#2D4A6E] hover:bg-[#243D5C] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-lg transition-colors text-sm whitespace-nowrap"
                 >
                   Run Audit
@@ -544,6 +647,9 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            {/* Data inputs */}
+            {pageMetadata && <DataInputsPanel metadata={pageMetadata} />}
 
             {/* Agent cards */}
             <div className="space-y-2">

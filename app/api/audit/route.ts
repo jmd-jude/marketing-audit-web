@@ -34,6 +34,50 @@ interface PageSpeedData {
   error?: string
 }
 
+interface PageMetadata {
+  title: string | null
+  metaDescription: string | null
+  canonical: string | null
+  h1s: string[]
+  wordCount: number
+  hasStructuredData: boolean
+  hasOgTags: boolean
+  metaRobots: string | null
+}
+
+function extractPageMetadata(html: string): PageMetadata {
+  const title = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? null
+
+  const metaDescription =
+    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i)?.[1]?.trim() ??
+    html.match(/<meta[^>]+content=["']([^"']*)[^>]+name=["']description["']/i)?.[1]?.trim() ??
+    null
+
+  const canonical =
+    html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*)/i)?.[1]?.trim() ??
+    html.match(/<link[^>]+href=["']([^"']*)[^>]+rel=["']canonical["']/i)?.[1]?.trim() ??
+    null
+
+  const h1Matches = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)]
+  const h1s = h1Matches
+    .map((m) => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+
+  const textOnly = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const wordCount = textOnly.split(' ').filter((w) => w.length > 2).length
+
+  const hasStructuredData = /<script[^>]+type=["']application\/ld\+json["']/i.test(html)
+  const hasOgTags = /<meta[^>]+property=["']og:/i.test(html)
+
+  const metaRobots =
+    html.match(/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']*)/i)?.[1]?.trim() ??
+    html.match(/<meta[^>]+content=["']([^"']*)[^>]+name=["']robots["']/i)?.[1]?.trim() ??
+    null
+
+  return { title, metaDescription, canonical, h1s, wordCount, hasStructuredData, hasOgTags, metaRobots }
+}
+
 async function fetchRobotsAndSitemap(url: string): Promise<string> {
   try {
     const origin = new URL(url).origin
@@ -60,20 +104,28 @@ async function fetchRobotsAndSitemap(url: string): Promise<string> {
   }
 }
 
-async function fetchPageContent(url: string): Promise<string> {
+async function fetchPageContent(url: string): Promise<{ content: string; metadata: PageMetadata }> {
+  const emptyMetadata: PageMetadata = {
+    title: null, metaDescription: null, canonical: null,
+    h1s: [], wordCount: 0, hasStructuredData: false, hasOgTags: false, metaRobots: null,
+  }
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MarketingAuditBot/1.0)' },
       signal: AbortSignal.timeout(10000),
     })
     const html = await response.text()
+    const metadata = extractPageMetadata(html)
     const stripped = html
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
-    return stripped.slice(0, 15000)
+    return { content: stripped.slice(0, 15000), metadata }
   } catch {
-    return `Unable to fetch page content from ${url}. Analyze based on URL structure and domain name alone.`
+    return {
+      content: `Unable to fetch page content from ${url}. Analyze based on URL structure and domain name alone.`,
+      metadata: emptyMetadata,
+    }
   }
 }
 
@@ -222,7 +274,33 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
   }
 }
 
+async function notifyDiscordStart(payload: { name: string; company: string; url: string }) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+  if (!webhookUrl) return
+
+  const { name, company, url } = payload
+  const auditor = company ? `${name} @ ${company}` : name
+
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      embeds: [{
+        title: 'Audit Started',
+        color: 0x2D4A6E,
+        fields: [
+          { name: 'Auditor', value: auditor, inline: true },
+          { name: 'Site', value: url, inline: true },
+        ],
+        timestamp: new Date().toISOString(),
+      }],
+    }),
+  })
+}
+
 async function notifyDiscord(payload: {
+  name: string
+  company: string
   url: string
   compositeScore: number
   scores: Record<string, number>
@@ -235,10 +313,11 @@ async function notifyDiscord(payload: {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL
   if (!webhookUrl) return
 
-  const { url, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed } = payload
+  const { name, company, url, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed } = payload
   const totalTokens = totalInputTokens + totalOutputTokens
   const cost = ((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)
   const duration = (durationMs / 1000).toFixed(1)
+  const auditor = company ? `${name} @ ${company}` : name
 
   const scoreBar = (s: number) => {
     const filled = Math.round(s / 10)
@@ -258,18 +337,18 @@ async function notifyDiscord(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       embeds: [{
-        title: 'Marketing Audit Complete',
+        title: 'Audit Complete',
         url,
         color: compositeScore >= 75 ? 0x16a34a : compositeScore >= 55 ? 0xca8a04 : 0xdc2626,
         fields: [
+          { name: 'Auditor', value: auditor, inline: true },
           { name: 'Overall Score', value: `**${compositeScore}/100**`, inline: true },
           { name: 'Duration', value: `${duration}s`, inline: true },
-          { name: 'Model', value: model, inline: true },
           { name: 'Agent Scores', value: agentLines, inline: false },
           { name: 'PageSpeed Insights', value: psField, inline: false },
           { name: 'Token Usage', value: `↑ ${totalInputTokens.toLocaleString()} in  ↓ ${totalOutputTokens.toLocaleString()} out  (${totalTokens.toLocaleString()} total)`, inline: false },
           { name: 'Cost', value: `$${cost}`, inline: true },
-          { name: 'Site', value: url, inline: true },
+          { name: 'Model', value: model, inline: true },
         ],
         timestamp: new Date().toISOString(),
       }],
@@ -280,6 +359,8 @@ async function notifyDiscord(payload: {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const url = searchParams.get('url')
+  const name = searchParams.get('name') ?? 'Unknown'
+  const company = searchParams.get('company') ?? ''
 
   if (!url) {
     return new Response(JSON.stringify({ error: 'URL is required' }), {
@@ -298,19 +379,23 @@ export async function GET(request: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
 
+      notifyDiscordStart({ name, company, url: targetUrl }).catch(() => { /* non-critical */ })
+
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
       // Fetch HTML and PageSpeed in parallel
-      const [pageContent, pageSpeed, crawlData] = await Promise.all([
+      const [pageData, pageSpeed, crawlData] = await Promise.all([
         fetchPageContent(targetUrl),
         fetchPageSpeed(targetUrl),
         fetchRobotsAndSitemap(targetUrl),
       ])
+      const { content: pageContent, metadata: pageMetadata } = pageData
 
       send({
         type: 'fetched',
         message: `Page fetched${pageSpeed ? ' + PageSpeed data ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}. Launching 5 parallel agents...`,
         pageSpeed,
+        metadata: pageMetadata,
       })
 
       const agentKeys: AgentKey[] = ['content', 'conversion', 'competitive', 'technical', 'strategy']
@@ -365,7 +450,7 @@ export async function GET(request: Request) {
         model,
       })
 
-      await notifyDiscord({ url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+      await notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
 
       controller.close()

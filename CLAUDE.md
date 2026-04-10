@@ -22,17 +22,21 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `lib/agents.ts` | All 5 agent system prompts + weights config |
 | `components/DataSourcesPanel.tsx` | Data sources tier UI (active / available / roadmap) |
 | `product-docs/ROADMAP.md` | Product backlog and tier model |
+| `product-docs/ARCHITECTURE.md` | System architecture diagrams — current state, full vision, and direct mail parallel |
 
 ## How the Audit Works
 
-1. User enters a URL → `GET /api/audit?url=...`
-2. API fetches page HTML (truncated to 15k chars) and Google PageSpeed data **in parallel**
-3. 5 Claude API calls fire simultaneously (one per agent), each receiving the HTML + PageSpeed data (technical agent only for PageSpeed)
-4. Results stream back to the browser via SSE (`text/event-stream`)
-5. Each agent card updates in real-time as responses complete
-6. Composite score = weighted average across 5 dimensions
-7. Discord webhook fires on completion with score + token stats
-8. PageSpeed data surfaces in the technical agent card as a 4-pill Lighthouse score strip
+1. User enters name, company (optional), and URL → `GET /api/audit?url=...&name=...&company=...`
+2. Discord **start ping** fires immediately (name + company + URL)
+3. API fetches page HTML (truncated to 15k chars), Google PageSpeed data, and robots.txt/sitemap **in parallel**
+4. Page metadata extracted from raw HTML before stripping (title, meta description, canonical, H1s, word count, structured data, OG tags)
+5. 5 Claude API calls fire simultaneously (one per agent), each receiving the HTML + PageSpeed data (technical agent only for PageSpeed)
+6. Results stream back to the browser via SSE (`text/event-stream`)
+7. Each agent card updates in real-time as responses complete
+8. Composite score = weighted average across 5 dimensions
+9. Discord **completion embed** fires with name + company + score + token stats
+10. PageSpeed data surfaces in the technical agent card as a 4-pill Lighthouse score strip
+11. Data Inputs panel shows extracted page metadata (collapses, starts open)
 
 ## Agent Weights
 
@@ -50,7 +54,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Yes | Anthropic console |
 | `ANTHROPIC_MODEL` | No | Defaults to `claude-sonnet-4-6` |
-| `DISCORD_WEBHOOK_URL` | No | Audit completion notifications |
+| `DISCORD_WEBHOOK_URL` | No | Start ping + completion notifications — points at #digital-marketing-audit-poc channel |
 | `GOOGLE_PAGESPEED_API_KEY` | No | Falls back to unauthenticated (rate-limited) |
 
 ## Development
@@ -77,8 +81,10 @@ See `product-docs/ROADMAP.md` for full backlog.
 - The API route (`app/api/audit/route.ts`) handles all data fetching and orchestration. Agent prompts should not contain fetch logic — context is passed in via `additionalContext` parameter.
 - All agent output is JSON only — prompts explicitly instruct the model not to wrap in markdown. The route strips fences defensively.
 - PageSpeed data is passed only to the technical agent. Other agents receive HTML only.
-- Discord notification is fire-and-forget — never block the SSE stream on it.
+- Discord has two events: `notifyDiscordStart` (fires before fetch, includes name + company + URL) and `notifyDiscord` (fires after completion, includes score + tokens). Both are fire-and-forget — never block the SSE stream on either.
 - Token usage is tracked per-agent via `message.usage` and aggregated into the `complete` SSE event. Displayed in the run stats bar and Discord embed.
+- `extractPageMetadata` runs on raw HTML before stripping — must run before `fetchPageContent` strips scripts/styles or metadata regex will still work but word count will be inflated by JS. Currently correct: metadata extracted inside `fetchPageContent` on the raw response.
+- Name and company are passed as query params (`?name=&company=`). Company is optional; name is required by the UI but defaults to `'Unknown'` server-side if missing.
 
 ## What Not to Do
 
