@@ -186,7 +186,7 @@ async function runAgent(
 ): Promise<AgentRunResult> {
   const agent = AGENTS.find((a) => a.key === agentKey)!
 
-  const userMessage = `Analyze this website for the ${agent.category} dimension.
+  const userMessage = `Analyze this website for the ${agent.label} dimension.
 
 URL: ${url}
 ${additionalContext ? `\n${additionalContext}\n` : ''}
@@ -237,7 +237,7 @@ async function notifyDiscord(payload: {
 
   const { url, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed } = payload
   const totalTokens = totalInputTokens + totalOutputTokens
-  const estimatedCost = ((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)
+  const cost = ((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)
   const duration = (durationMs / 1000).toFixed(1)
 
   const scoreBar = (s: number) => {
@@ -268,9 +268,9 @@ async function notifyDiscord(payload: {
           { name: 'Agent Scores', value: agentLines, inline: false },
           { name: 'PageSpeed Insights', value: psField, inline: false },
           { name: 'Token Usage', value: `↑ ${totalInputTokens.toLocaleString()} in  ↓ ${totalOutputTokens.toLocaleString()} out  (${totalTokens.toLocaleString()} total)`, inline: false },
-          { name: 'Cost', value: `~$${estimatedCost}`, inline: true },
+          { name: 'Cost', value: `$${cost}`, inline: true },
+          { name: 'Site', value: `[${url}](${url})`, inline: true },
         ],
-        footer: { text: url },
         timestamp: new Date().toISOString(),
       }],
     }),
@@ -359,7 +359,7 @@ export async function GET(request: Request) {
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           totalTokens: totalInputTokens + totalOutputTokens,
-          estimatedCostUsd: parseFloat(((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)),
+          costUsd: parseFloat(((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)),
         },
         durationMs,
         model,

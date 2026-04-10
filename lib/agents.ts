@@ -3,8 +3,6 @@ export type AgentKey = 'content' | 'conversion' | 'competitive' | 'technical' | 
 export interface AgentConfig {
   key: AgentKey
   label: string
-  category: string
-  weight: number
   color: string
   systemPrompt: string
 }
@@ -13,8 +11,6 @@ export const AGENTS: AgentConfig[] = [
   {
     key: 'content',
     label: 'Content & Messaging',
-    category: 'Content & Messaging',
-    weight: 0.25,
     color: 'blue',
     systemPrompt: `You are a content and messaging analysis specialist. You analyze website content for marketing effectiveness, copy quality, and persuasion power.
 
@@ -84,8 +80,6 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
   {
     key: 'conversion',
     label: 'Conversion Optimization',
-    category: 'Conversion Optimization',
-    weight: 0.20,
     color: 'green',
     systemPrompt: `You are a conversion rate optimization (CRO) specialist. You analyze websites for conversion barriers, friction points, and optimization opportunities.
 
@@ -148,8 +142,6 @@ Return ONLY a JSON object (no markdown, no code blocks):
   {
     key: 'competitive',
     label: 'Competitive Positioning',
-    category: 'Competitive Positioning',
-    weight: 0.15,
     color: 'purple',
     systemPrompt: `You are a competitive analysis specialist. You research and analyze the competitive landscape to identify positioning opportunities, market gaps, and competitive advantages.
 
@@ -209,8 +201,6 @@ Return ONLY a JSON object (no markdown, no code blocks):
   {
     key: 'technical',
     label: 'SEO & Discoverability',
-    category: 'SEO & Technical',
-    weight: 0.20,
     color: 'orange',
     systemPrompt: `You are a technical marketing analysis specialist. You evaluate the technical foundations that impact marketing effectiveness: SEO infrastructure, site performance, tracking setup, and content architecture.
 
@@ -290,8 +280,6 @@ Return ONLY a JSON object (no markdown, no code blocks):
   {
     key: 'strategy',
     label: 'Brand & Growth Strategy',
-    category: 'Brand & Growth',
-    weight: 0.20,
     color: 'red',
     systemPrompt: `You are a marketing strategy specialist. You evaluate overall marketing strategy, growth opportunities, pricing effectiveness, and revenue optimization potential.
 

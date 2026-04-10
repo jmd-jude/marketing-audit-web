@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { AGENTS } from '@/lib/agents'
+import { AGENTS, WEIGHTS } from '@/lib/agents'
 import { DataSourcesPanel } from '@/components/DataSourcesPanel'
 
 type AgentStatus = 'idle' | 'running' | 'complete' | 'error'
@@ -18,7 +18,7 @@ interface UsageStats {
   inputTokens: number
   outputTokens: number
   totalTokens: number
-  estimatedCostUsd: number
+  costUsd: number
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,7 +64,7 @@ function generateMarkdownReport(
     const result = state.result as AnyResult
 
     lines.push(`## ${agent.label}`)
-    lines.push(`**Score:** ${state.score}/100 — ${scoreLabel(state.score!)} | **Weight:** ${Math.round(agent.weight * 100)}% of overall`)
+    lines.push(`**Score:** ${state.score}/100 — ${scoreLabel(state.score!)} | **Weight:** ${Math.round(WEIGHTS[agent.key] * 100)}% of overall`)
     lines.push('')
 
     if (Array.isArray(result.dimensions)) {
@@ -170,7 +170,7 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
         {/* Label */}
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-[#1A1918] text-sm">{agent.label}</div>
-          <div className="text-xs text-[#6B6560] mt-0.5">{Math.round(agent.weight * 100)}% of overall</div>
+          <div className="text-xs text-[#6B6560] mt-0.5">{Math.round(WEIGHTS[agent.key] * 100)}% of overall</div>
         </div>
 
         {/* Score */}
@@ -500,7 +500,7 @@ export default function Home() {
                     <div className="w-2 h-2 rounded-full bg-[#2D4A6E]/25" />
                   </div>
                   <div className="text-[#6B6560] text-xs leading-tight">{a.label}</div>
-                  <div className="text-[#C4BFB8] text-xs">{Math.round(a.weight * 100)}%</div>
+                  <div className="text-[#C4BFB8] text-xs">{Math.round(WEIGHTS[a.key] * 100)}%</div>
                 </div>
               ))}
             </div>
