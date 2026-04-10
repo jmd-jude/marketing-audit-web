@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AGENTS, WEIGHTS } from '@/lib/agents'
 import { DataSourcesPanel } from '@/components/DataSourcesPanel'
 
@@ -415,6 +415,8 @@ function DataInputsPanel({ metadata }: { metadata: PageMetadata }) {
   )
 }
 
+const RUN_LIMIT = 5
+
 export default function Home() {
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
@@ -427,11 +429,38 @@ export default function Home() {
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
   const [auditModel, setAuditModel] = useState<string>('')
   const [durationSec, setDurationSec] = useState<number | null>(null)
+  const [savedCode, setSavedCode] = useState<string | null>(null)
+  const [inviteCode, setInviteCode] = useState('')
+  const [inviteError, setInviteError] = useState('')
+  const [auditCount, setAuditCount] = useState(0)
+  const [googleConnected, setGoogleConnected] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const code = localStorage.getItem('invite_code')
+    const count = parseInt(localStorage.getItem('audit_count') ?? '0', 10)
+    setSavedCode(code)
+    setAuditCount(count)
+    // Check OAuth connection status and handle redirect params
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('connected') === '1') {
+      window.history.replaceState({}, '', '/')
+    }
+    fetch('/api/auth/status').then((r) => r.json()).then((d) => {
+      if (d.connected) setGoogleConnected(true)
+    }).catch(() => {})
+  }, [])
+
+  const handleDisconnect = async () => {
+    await fetch('/api/auth/disconnect', { method: 'POST' })
+    setGoogleConnected(false)
+  }
 
   const startAudit = async () => {
     if (!url.trim()) return
     const targetUrl = url.startsWith('http') ? url : `https://${url}`
+    const codeToUse = savedCode ?? inviteCode.trim()
+    setInviteError('')
     setPhase('running')
     setStatusMsg('Connecting...')
     setCompositeScore(null)
@@ -444,9 +473,15 @@ export default function Home() {
     abortRef.current = new AbortController()
 
     try {
-      const res = await fetch(`/api/audit?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}`, {
+      const res = await fetch(`/api/audit?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}&inviteCode=${encodeURIComponent(codeToUse)}`, {
         signal: abortRef.current.signal,
       })
+      if (res.status === 401) {
+        setInviteError('Invalid invite code. Please check and try again.')
+        setPhase('idle')
+        setAgentStates({})
+        return
+      }
       if (!res.ok || !res.body) throw new Error('API error')
 
       const reader = res.body.getReader()
@@ -484,6 +519,16 @@ export default function Home() {
               setDurationSec(Math.round(event.durationMs / 100) / 10)
               setPhase('done')
               setStatusMsg('Analysis complete')
+              // Save invite code and increment run counter
+              if (!savedCode && inviteCode.trim()) {
+                localStorage.setItem('invite_code', inviteCode.trim())
+                setSavedCode(inviteCode.trim())
+              }
+              setAuditCount((prev) => {
+                const next = prev + 1
+                localStorage.setItem('audit_count', String(next))
+                return next
+              })
             }
           } catch { /* skip malformed events */ }
         }
@@ -547,7 +592,30 @@ export default function Home() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-14">
-        {phase === 'idle' && (
+        {phase === 'idle' && auditCount >= RUN_LIMIT && (
+          <div className="text-center space-y-6 max-w-lg mx-auto">
+            <div className="space-y-3">
+              <div className="w-14 h-14 rounded-full bg-[#E8E4DC] mx-auto flex items-center justify-center">
+                <svg className="w-6 h-6 text-[#6B6560]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              </div>
+              <h2 className="font-display text-[#1A1918] text-2xl">Complimentary audits used</h2>
+              <p className="text-[#6B6560] text-sm leading-relaxed">
+                You&apos;ve used your {RUN_LIMIT} complimentary audits. Get in touch to discuss ongoing access or a full agency engagement.
+              </p>
+            </div>
+            <a
+              href="mailto:jude.hoffner@gmail.com?subject=Marketing Intelligence Access"
+              className="inline-block bg-[#2D4A6E] hover:bg-[#243D5C] text-white font-semibold px-8 py-3.5 rounded-lg transition-colors text-sm"
+            >
+              Contact Us
+            </a>
+            <p className="text-[#C4BFB8] text-xs">Or reach out directly to your agency contact.</p>
+          </div>
+        )}
+
+        {phase === 'idle' && auditCount < RUN_LIMIT && (
           <div className="text-center space-y-10">
             <div className="space-y-4">
               <h2 className="font-display text-[#1A1918]" style={{ fontSize: 'clamp(2.4rem, 4.5vw, 3.8rem)', lineHeight: 1.1 }}>
@@ -559,6 +627,18 @@ export default function Home() {
             </div>
 
             <div className="max-w-lg mx-auto space-y-3">
+              {!savedCode && (
+                <div>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => { setInviteCode(e.target.value); setInviteError('') }}
+                    placeholder="Invite code"
+                    className={`w-full rounded-lg bg-white border text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors ${inviteError ? 'border-red-300' : 'border-[#E8E4DC]'}`}
+                  />
+                  {inviteError && <p className="text-red-600 text-xs mt-1.5 text-left">{inviteError}</p>}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
@@ -586,13 +666,44 @@ export default function Home() {
                 />
                 <button
                   onClick={startAudit}
-                  disabled={!url.trim() || !name.trim()}
+                  disabled={!url.trim() || !name.trim() || (!savedCode && !inviteCode.trim())}
                   className="bg-[#2D4A6E] hover:bg-[#243D5C] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-lg transition-colors text-sm whitespace-nowrap"
                 >
                   Run Audit
                 </button>
               </div>
-              <p className="text-[#9C9690] text-xs">Takes 30–60 seconds. No account required.</p>
+              <p className="text-[#9C9690] text-xs">
+                Takes 30–60 seconds.{auditCount > 0 ? ` ${RUN_LIMIT - auditCount} of ${RUN_LIMIT} complimentary audits remaining.` : ''}
+              </p>
+
+              {/* Google OAuth connect strip */}
+              <div className="flex items-center justify-between bg-[#F8F6F2] border border-[#E8E4DC] rounded-lg px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  {googleConnected ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-[#D4CFC8] flex-shrink-0" />
+                  )}
+                  <span className="text-xs text-[#6B6560]">
+                    {googleConnected ? 'Google Analytics & Search Console connected' : 'Connect Google Analytics & Search Console for richer analysis'}
+                  </span>
+                </div>
+                {googleConnected ? (
+                  <button
+                    onClick={handleDisconnect}
+                    className="text-xs text-[#9C9690] hover:text-[#6B6560] transition-colors ml-3 flex-shrink-0"
+                  >
+                    Disconnect
+                  </button>
+                ) : (
+                  <a
+                    href="/api/auth/connect"
+                    className="text-xs text-[#2D4A6E] border border-[#2D4A6E]/30 hover:border-[#2D4A6E] px-2.5 py-1 rounded transition-colors ml-3 flex-shrink-0"
+                  >
+                    Connect
+                  </a>
+                )}
+              </div>
             </div>
 
             {/* Agent preview */}
@@ -608,7 +719,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-        )}
+        )}  {/* end auditCount < RUN_LIMIT */}
 
         {(phase === 'running' || phase === 'done') && (
           <div className="space-y-4">
@@ -666,9 +777,12 @@ export default function Home() {
             </div>
 
             {(phase === 'running' || phase === 'done') && (
-              <DataSourcesPanel hasPageSpeed={!!Object.values(agentStates).find(
-                (s) => s.result && (s.result as Record<string, unknown>).pagespeed
-              )} />
+              <DataSourcesPanel
+                hasPageSpeed={!!Object.values(agentStates).find(
+                  (s) => s.result && (s.result as Record<string, unknown>).pagespeed
+                )}
+                googleConnected={googleConnected}
+              />
             )}
 
             {phase === 'done' && (

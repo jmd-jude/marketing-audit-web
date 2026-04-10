@@ -56,6 +56,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `ANTHROPIC_MODEL` | No | Defaults to `claude-sonnet-4-6` |
 | `DISCORD_WEBHOOK_URL` | No | Start ping + completion notifications — points at #digital-marketing-audit-poc channel |
 | `GOOGLE_PAGESPEED_API_KEY` | No | Falls back to unauthenticated (rate-limited) |
+| `INVITE_CODES` | No | Comma-separated list of valid invite codes. If unset, gate is disabled (dev mode). |
 
 ## Development
 

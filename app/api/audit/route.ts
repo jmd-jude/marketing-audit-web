@@ -1,8 +1,39 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AGENTS, WEIGHTS, AgentKey } from '@/lib/agents'
+import { jwtVerify } from 'jose'
 
 export const runtime = 'edge'
 export const maxDuration = 120
+
+const SESSION_COOKIE = 'goog_session'
+
+function getSecretKey() {
+  const secret = process.env.SESSION_SECRET
+  if (!secret) return null
+  return new TextEncoder().encode(secret)
+}
+
+interface SessionPayload {
+  accessToken: string
+  refreshToken: string
+  expiryDate: number | null
+  ga4PropertyId: string | null
+}
+
+async function getSessionTokens(request: Request): Promise<SessionPayload | null> {
+  try {
+    const cookieHeader = request.headers.get('cookie') ?? ''
+    const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`))
+    const token = match?.[1]
+    if (!token) return null
+    const secretKey = getSecretKey()
+    if (!secretKey) return null
+    const { payload } = await jwtVerify(token, secretKey)
+    return payload as unknown as SessionPayload
+  } catch {
+    return null
+  }
+}
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -361,6 +392,18 @@ export async function GET(request: Request) {
   const url = searchParams.get('url')
   const name = searchParams.get('name') ?? 'Unknown'
   const company = searchParams.get('company') ?? ''
+  const inviteCode = searchParams.get('inviteCode') ?? ''
+
+  const rawCodes = process.env.INVITE_CODES
+  if (rawCodes) {
+    const validCodes = rawCodes.split(',').map((s) => s.trim()).filter(Boolean)
+    if (!validCodes.includes(inviteCode)) {
+      return new Response(JSON.stringify({ error: 'Invalid invite code' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+  }
 
   if (!url) {
     return new Response(JSON.stringify({ error: 'URL is required' }), {
@@ -381,30 +424,49 @@ export async function GET(request: Request) {
 
       notifyDiscordStart({ name, company, url: targetUrl }).catch(() => { /* non-critical */ })
 
+      const isConnected = (await getSessionTokens(request)) !== null
+
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
-      // Fetch HTML and PageSpeed in parallel
-      const [pageData, pageSpeed, crawlData] = await Promise.all([
+      // Fetch HTML, PageSpeed, crawl data, and optionally GSC/GA4 in parallel
+      // GSC/GA4 is fetched via /api/connected-data (Node runtime) to avoid Edge/googleapis conflict
+      const origin = new URL(request.url).origin
+      const [pageData, pageSpeed, crawlData, connectedData] = await Promise.all([
         fetchPageContent(targetUrl),
         fetchPageSpeed(targetUrl),
         fetchRobotsAndSitemap(targetUrl),
+        isConnected
+          ? fetch(`${origin}/api/connected-data?siteUrl=${encodeURIComponent(targetUrl)}`, {
+              headers: { cookie: request.headers.get('cookie') ?? '' },
+            }).then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
+          : Promise.resolve({ gscContext: null, ga4Context: null }),
       ])
       const { content: pageContent, metadata: pageMetadata } = pageData
+      const { gscContext, ga4Context } = connectedData
 
       send({
         type: 'fetched',
-        message: `Page fetched${pageSpeed ? ' + PageSpeed data ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}. Launching 5 parallel agents...`,
+        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}. Launching 5 parallel agents...`,
         pageSpeed,
         metadata: pageMetadata,
+        connected: isConnected,
       })
 
       const agentKeys: AgentKey[] = ['content', 'conversion', 'competitive', 'technical', 'strategy']
 
+      // Per PRD: which agents get which connected data
+      const GSC_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content'])
+      const GA4_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content', 'conversion'])
+
       const promises = agentKeys.map(async (key) => {
-        // Only pass PageSpeed + crawl data to the technical agent
-        const additionalContext = key === 'technical'
-          ? [pageSpeed ? formatPageSpeedContext(pageSpeed) : null, crawlData || null].filter(Boolean).join('\n\n') || undefined
-          : undefined
+        const parts: (string | null)[] = []
+        if (key === 'technical') {
+          parts.push(pageSpeed ? formatPageSpeedContext(pageSpeed) : null)
+          parts.push(crawlData || null)
+        }
+        if (gscContext && GSC_AGENTS.has(key)) parts.push(gscContext)
+        if (ga4Context && GA4_AGENTS.has(key)) parts.push(ga4Context)
+        const additionalContext = parts.filter(Boolean).join('\n\n') || undefined
 
         try {
           const agentResult = await runAgent(key, targetUrl, pageContent, additionalContext)

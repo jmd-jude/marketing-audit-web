@@ -78,9 +78,9 @@
 
 ### Access & Monetization
 
-- [ ] **Invite code + run limit**
+- [x] **Invite code + run limit**
   Invite code field on landing page — valid codes in env var, checked server-side. Code stored in localStorage so re-entry isn't required. Each audit increments a localStorage counter; at N runs (e.g. 5) show a "complimentary audits used" message with a contact/upgrade CTA. Counter is bypassable but sufficient for demo-stage metering — anyone motivated enough to clear localStorage is a warm lead.
-  _Effort: S | Impact: M_
+  _Status: Shipped — `INVITE_CODES` env var (comma-separated), `RUN_LIMIT = 5` in `page.tsx`, gate screen with contact CTA_
 
 - [ ] **Stripe paywall**
   Natural successor to the run limit. Stripe Payment Link (no-code) for an audit pack (e.g. 10 audits / $49). On checkout success, issue a redemption token to localStorage and lift the gate. No backend payment logic required — Stripe hosts the checkout page.

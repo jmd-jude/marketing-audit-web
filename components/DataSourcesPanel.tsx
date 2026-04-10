@@ -125,15 +125,17 @@ function ConnectModal({ source, onClose }: { source: DataSource; onClose: () => 
   )
 }
 
-export function DataSourcesPanel({ hasPageSpeed }: { hasPageSpeed: boolean }) {
+export function DataSourcesPanel({ hasPageSpeed, googleConnected = false }: { hasPageSpeed: boolean; googleConnected?: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [selectedSource, setSelectedSource] = useState<DataSource | null>(null)
 
-  const availableSources = DATA_SOURCES.filter((s) => s.status === 'available')
+  const sources = DATA_SOURCES.map((s) => {
+    if (s.id === 'pagespeed') return { ...s, status: hasPageSpeed ? 'active' : 'coming_soon' as DataSource['status'] }
+    if ((s.id === 'ga4' || s.id === 'gsc') && googleConnected) return { ...s, status: 'active' as DataSource['status'] }
+    return s
+  })
 
-  const sources = DATA_SOURCES.map((s) =>
-    s.id === 'pagespeed' ? { ...s, status: hasPageSpeed ? 'active' : 'coming_soon' as DataSource['status'] } : s
-  )
+  const availableSources = sources.filter((s) => s.status === 'available')
   const activeCount = sources.filter((s) => s.status === 'active').length
 
   return (
