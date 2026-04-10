@@ -170,7 +170,7 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
         {/* Label */}
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-[#1A1918] text-sm">{agent.label}</div>
-          <div className="text-xs text-[#9C9690] mt-0.5">{Math.round(agent.weight * 100)}% of overall</div>
+          <div className="text-xs text-[#6B6560] mt-0.5">{Math.round(agent.weight * 100)}% of overall</div>
         </div>
 
         {/* Score */}
@@ -188,7 +188,7 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
         )}
 
         {state.status === 'running' && (
-          <span className="text-xs text-[#9C9690]">Analyzing...</span>
+          <span className="text-xs text-[#6B6560]">Analyzing...</span>
         )}
       </div>
 
@@ -212,7 +212,7 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
                       </div>
                       <div className={`w-10 text-xs font-semibold text-right flex-shrink-0 tabular-nums ${d.score >= 7 ? 'text-emerald-700' : d.score >= 5 ? 'text-amber-600' : 'text-red-700'}`}>{d.score}/10</div>
                     </div>
-                    <div className="text-xs text-[#9C9690] pl-[11rem]">{d.finding}</div>
+                    <div className="text-xs text-[#3D3936] pl-[11rem]">{d.finding}</div>
                   </div>
                 ))}
               </div>
@@ -298,7 +298,7 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
                   )
                 })}
               </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#9C9690]">
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#6B6560]">
                 {([
                   { label: 'LCP', key: 'lcp' },
                   { label: 'CLS', key: 'cls' },
@@ -446,7 +446,10 @@ export default function Home() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence</h1>
-            <p className="text-[#9C9690] text-xs mt-0.5">Five-dimension website analysis</p>
+            {phase === 'idle'
+              ? <p className="text-[#6B6560] text-xs mt-0.5">Five-dimension website analysis</p>
+              : <p className="text-[#3D3936] text-xs mt-0.5 font-medium">{url.startsWith('http') ? url : `https://${url}`}</p>
+            }
           </div>
           {phase !== 'idle' && (
             <button onClick={reset} className="text-[#6B6560] hover:text-[#1A1918] text-sm transition-colors">
@@ -527,10 +530,10 @@ export default function Home() {
                     ? `Marketing Score: ${compositeScore}/100 — ${scoreLabel(compositeScore)}`
                     : 'Running Analysis...'}
                 </div>
-                <div className="text-[#9C9690] text-sm mb-3">{statusMsg}</div>
+                <div className="text-[#6B6560] text-sm mb-3">{statusMsg}</div>
                 {phase === 'running' && (
                   <div className="space-y-1.5">
-                    <div className="text-[#9C9690] text-xs">{completedAgents} of 5 agents complete</div>
+                    <div className="text-[#6B6560] text-xs">{completedAgents} of 5 agents complete</div>
                     <div className="bg-[#F0EDE8] rounded-full h-1 w-48">
                       <div
                         className="bg-[#2D4A6E] h-1 rounded-full transition-all duration-700"
@@ -560,17 +563,6 @@ export default function Home() {
               <DataSourcesPanel hasPageSpeed={!!Object.values(agentStates).find(
                 (s) => s.result && (s.result as Record<string, unknown>).pagespeed
               )} />
-            )}
-
-            {phase === 'done' && usageStats && (
-              <div className="bg-white rounded-lg border border-[#E8E4DC] px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-[#9C9690]">
-                <span className="font-semibold text-[#6B6560]">Run details</span>
-                <span>Duration: {durationSec}s</span>
-                <span>Model: {auditModel}</span>
-                <span>Input: {usageStats.inputTokens.toLocaleString()} tokens</span>
-                <span>Output: {usageStats.outputTokens.toLocaleString()} tokens</span>
-                <span>Total: {usageStats.totalTokens.toLocaleString()}</span>
-              </div>
             )}
 
             {phase === 'done' && (
