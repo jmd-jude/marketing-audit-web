@@ -269,7 +269,7 @@ async function notifyDiscord(payload: {
           { name: 'PageSpeed Insights', value: psField, inline: false },
           { name: 'Token Usage', value: `↑ ${totalInputTokens.toLocaleString()} in  ↓ ${totalOutputTokens.toLocaleString()} out  (${totalTokens.toLocaleString()} total)`, inline: false },
           { name: 'Cost', value: `$${cost}`, inline: true },
-          { name: 'Site', value: `[${url}](${url})`, inline: true },
+          { name: 'Site', value: url, inline: true },
         ],
         timestamp: new Date().toISOString(),
       }],
