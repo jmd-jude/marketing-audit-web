@@ -21,12 +21,21 @@ interface UsageStats {
   estimatedCostUsd: number
 }
 
-const COLOR_MAP: Record<string, { bg: string; border: string; badge: string; dot: string }> = {
-  blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',  badge: 'bg-blue-100 text-blue-800',    dot: 'bg-blue-500'   },
-  green:  { bg: 'bg-green-50',  border: 'border-green-200', badge: 'bg-green-100 text-green-800',  dot: 'bg-green-500'  },
-  purple: { bg: 'bg-purple-50', border: 'border-purple-200',badge: 'bg-purple-100 text-purple-800',dot: 'bg-purple-500' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-200',badge: 'bg-orange-100 text-orange-800',dot: 'bg-orange-500' },
-  red:    { bg: 'bg-red-50',    border: 'border-red-200',   badge: 'bg-red-100 text-red-800',      dot: 'bg-red-500'    },
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyResult = Record<string, any>
+
+function scoreColor(score: number) {
+  if (score >= 75) return 'text-emerald-700'
+  if (score >= 55) return 'text-amber-600'
+  return 'text-red-700'
+}
+
+function scoreLabel(score: number) {
+  if (score >= 80) return 'Strong'
+  if (score >= 65) return 'Good'
+  if (score >= 50) return 'Fair'
+  if (score >= 35) return 'Weak'
+  return 'Critical'
 }
 
 function generateMarkdownReport(
@@ -67,13 +76,13 @@ function generateMarkdownReport(
     }
 
     if (Array.isArray(result.wins) && result.wins.length > 0) {
-      lines.push('### Wins')
+      lines.push('### Strengths')
       for (const w of result.wins as string[]) lines.push(`- ${w}`)
       lines.push('')
     }
 
     if (Array.isArray(result.critical_fixes) && result.critical_fixes.length > 0) {
-      lines.push('### Critical Fixes')
+      lines.push('### Priority Fixes')
       for (const f of result.critical_fixes as string[]) lines.push(`- ${f}`)
       lines.push('')
     }
@@ -91,7 +100,7 @@ function generateMarkdownReport(
     }
 
     if (result.biggest_lever) {
-      lines.push('### Biggest Growth Lever')
+      lines.push('### Biggest Opportunity')
       lines.push(result.biggest_lever as string)
       lines.push('')
     }
@@ -111,32 +120,18 @@ function generateMarkdownReport(
   return lines.join('\n')
 }
 
-function scoreColor(score: number) {
-  if (score >= 75) return 'text-green-600'
-  if (score >= 55) return 'text-yellow-600'
-  return 'text-red-600'
-}
-
-function scoreLabel(score: number) {
-  if (score >= 80) return 'Strong'
-  if (score >= 65) return 'Good'
-  if (score >= 50) return 'Fair'
-  if (score >= 35) return 'Weak'
-  return 'Critical'
-}
-
 function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
   const r = (size / 2) - 6
   const circ = 2 * Math.PI * r
   const dash = (score / 100) * circ
-  const color = score >= 75 ? '#16a34a' : score >= 55 ? '#ca8a04' : '#dc2626'
+  const color = score >= 75 ? '#15803d' : score >= 55 ? '#b45309' : '#b91c1c'
 
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e5e7eb" strokeWidth="6" />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E8E4DC" strokeWidth="5" />
       <circle
         cx={size/2} cy={size/2} r={r} fill="none"
-        stroke={color} strokeWidth="6"
+        stroke={color} strokeWidth="5"
         strokeDasharray={`${dash} ${circ}`}
         strokeLinecap="round"
       />
@@ -144,141 +139,148 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyResult = Record<string, any>
-
 function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentState }) {
   const [expanded, setExpanded] = useState(false)
-  const colors = COLOR_MAP[agent.color]
-
   const result = state.result as AnyResult | undefined
 
   return (
-    <div className={`rounded-xl border-2 transition-all duration-500 overflow-hidden ${
-      state.status === 'complete' ? `${colors.bg} ${colors.border}` :
-      state.status === 'running' ? 'bg-gray-50 border-gray-300' :
-      'bg-white border-gray-200'
+    <div className={`bg-white rounded-lg border border-[#E8E4DC] transition-all duration-300 overflow-hidden ${
+      state.status === 'complete' ? 'border-l-[3px] border-l-[#2D4A6E]' : ''
     }`}>
       <div
-        className="p-4 flex items-center gap-4 cursor-pointer select-none"
+        className="px-5 py-4 flex items-center gap-4 cursor-pointer select-none"
         onClick={() => state.status === 'complete' && setExpanded(!expanded)}
       >
         {/* Status indicator */}
-        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
-          {state.status === 'idle' && (
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-gray-400" />
-            </div>
-          )}
+        <div className="flex-shrink-0 w-5 flex items-center justify-center">
+          {state.status === 'idle' && <div className="w-2 h-2 rounded-full bg-[#D4CFC8]" />}
           {state.status === 'running' && (
-            <div className="w-8 h-8 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin" />
+            <div className="w-4 h-4 rounded-full border-2 border-[#E8E4DC] border-t-[#2D4A6E] animate-spin" />
           )}
           {state.status === 'complete' && (
-            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
+            <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
           )}
           {state.status === 'error' && (
-            <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-500 text-sm font-bold">!</div>
+            <div className="w-4 h-4 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold">!</div>
           )}
         </div>
 
         {/* Label */}
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-gray-900 text-sm">{agent.label}</div>
-          <div className="text-xs text-gray-500">{Math.round(agent.weight * 100)}% of overall score</div>
+          <div className="font-semibold text-[#1A1918] text-sm">{agent.label}</div>
+          <div className="text-xs text-[#9C9690] mt-0.5">{Math.round(agent.weight * 100)}% of overall</div>
         </div>
 
         {/* Score */}
         {state.status === 'complete' && state.score !== undefined && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className={`text-xl font-bold ${scoreColor(state.score)}`}>
+          <div className="flex items-baseline gap-1.5 flex-shrink-0">
+            <span className={`text-xl font-bold tabular-nums ${scoreColor(state.score)}`}>
               {state.score}
             </span>
-            <span className="text-gray-400 text-sm">/100</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors.badge}`}>
+            <span className="text-[#C4BFB8] text-sm">/100</span>
+            <span className={`text-xs font-medium ml-1 ${scoreColor(state.score)}`}>
               {scoreLabel(state.score)}
             </span>
-            <span className="text-gray-400 text-xs ml-1">{expanded ? '▲' : '▼'}</span>
+            <span className="text-[#C4BFB8] text-xs ml-2">{expanded ? '▲' : '▼'}</span>
           </div>
         )}
 
         {state.status === 'running' && (
-          <span className="text-xs text-gray-500">Analyzing...</span>
+          <span className="text-xs text-[#9C9690]">Analyzing...</span>
         )}
       </div>
 
       {/* Expanded detail */}
       {expanded && result && (
-        <div className="px-4 pb-4 border-t border-gray-200 pt-3 space-y-4">
-          {/* Dimensions */}
+        <div className="px-5 pb-5 border-t border-[#F0EDE8] pt-4 space-y-4">
+
           {Array.isArray(result.dimensions) && (
             <div>
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Dimension Scores</div>
-              <div className="space-y-2">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-3">Dimension Scores</div>
+              <div className="space-y-2.5">
                 {(result.dimensions as Array<{name: string; score: number; finding: string}>).map((d) => (
-                  <div key={d.name} className="space-y-0.5">
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="w-36 text-gray-600 flex-shrink-0">{d.name}</div>
-                      <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                  <div key={d.name} className="space-y-1">
+                    <div className="flex items-center gap-3 text-xs">
+                      <div className="w-40 text-[#6B6560] flex-shrink-0">{d.name}</div>
+                      <div className="flex-1 bg-[#F0EDE8] rounded-full h-1">
                         <div
-                          className={`h-1.5 rounded-full ${d.score >= 7 ? 'bg-green-500' : d.score >= 5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          className={`h-1 rounded-full ${d.score >= 7 ? 'bg-emerald-600' : d.score >= 5 ? 'bg-amber-500' : 'bg-red-600'}`}
                           style={{ width: `${d.score * 10}%` }}
                         />
                       </div>
-                      <div className={`w-10 text-xs font-semibold text-right flex-shrink-0 ${d.score >= 7 ? 'text-green-600' : d.score >= 5 ? 'text-yellow-600' : 'text-red-600'}`}>{d.score}/10</div>
+                      <div className={`w-10 text-xs font-semibold text-right flex-shrink-0 tabular-nums ${d.score >= 7 ? 'text-emerald-700' : d.score >= 5 ? 'text-amber-600' : 'text-red-700'}`}>{d.score}/10</div>
                     </div>
-                    <div className="text-xs text-gray-500 pl-36">{d.finding}</div>
+                    <div className="text-xs text-[#9C9690] pl-[11rem]">{d.finding}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Wins */}
-          {Array.isArray(result.wins) && (
+          {Array.isArray(result.wins) && result.wins.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1">Wins</div>
-              <ul className="space-y-1">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Strengths</div>
+              <ul className="space-y-1.5">
                 {(result.wins as string[]).map((w, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex gap-1.5 items-start"><span className="text-green-500 flex-shrink-0 mt-0.5">✓</span>{w}</li>
+                  <li key={i} className="text-xs text-[#1A1918] flex gap-2 items-start">
+                    <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    {w}
+                  </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Critical fixes */}
-          {Array.isArray(result.critical_fixes) && (
+          {Array.isArray(result.critical_fixes) && result.critical_fixes.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Critical Fixes</div>
-              <ul className="space-y-1">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Priority Fixes</div>
+              <ul className="space-y-1.5">
                 {(result.critical_fixes as string[]).map((f, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex gap-1.5 items-start"><span className="text-red-500 flex-shrink-0 mt-0.5">→</span>{f}</li>
+                  <li key={i} className="text-xs text-[#1A1918] flex gap-2 items-start">
+                    <span className="text-red-700 flex-shrink-0 font-bold leading-none mt-0.5 select-none">—</span>
+                    {f}
+                  </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Quick wins */}
-          {Array.isArray(result.quick_wins) && (
+          {Array.isArray(result.quick_wins) && result.quick_wins.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">Quick Wins</div>
-              <ul className="space-y-1">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Quick Wins</div>
+              <ul className="space-y-1.5">
                 {(result.quick_wins as string[]).map((w, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex gap-1.5 items-start"><span className="text-blue-500 flex-shrink-0 mt-0.5">⚡</span>{w}</li>
+                  <li key={i} className="text-xs text-[#1A1918] flex gap-2 items-start">
+                    <span className="text-[#2D4A6E] flex-shrink-0 font-semibold leading-none mt-0.5 select-none">+</span>
+                    {w}
+                  </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* SEO quick wins */}
-          {/* PageSpeed Insights pill strip */}
+          {Array.isArray(result.seo_quick_wins) && result.seo_quick_wins.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">SEO Quick Wins</div>
+              <ul className="space-y-1.5">
+                {(result.seo_quick_wins as string[]).map((w, i) => (
+                  <li key={i} className="text-xs text-[#1A1918] flex gap-2 items-start">
+                    <span className="text-[#2D4A6E] flex-shrink-0 font-semibold leading-none mt-0.5 select-none">+</span>
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {result.pagespeed && (
             <div>
-              <div className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-2">PageSpeed Insights (Real Data)</div>
-              <div className="grid grid-cols-4 gap-2 mb-2">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-3">PageSpeed Insights</div>
+              <div className="grid grid-cols-4 gap-2 mb-3">
                 {([
                   { label: 'Performance', key: 'performance' },
                   { label: 'Accessibility', key: 'accessibility' },
@@ -286,56 +288,44 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
                   { label: 'Best Practices', key: 'best_practices' },
                 ] as { label: string; key: string }[]).map(({ label, key }) => {
                   const val = (result.pagespeed as Record<string, unknown>)[key] as number
-                  const color = val >= 90 ? 'text-green-600 bg-green-50 border-green-200' : val >= 50 ? 'text-yellow-600 bg-yellow-50 border-yellow-200' : 'text-red-600 bg-red-50 border-red-200'
+                  const colorClass = val >= 90 ? 'text-emerald-700' : val >= 50 ? 'text-amber-600' : 'text-red-700'
+                  const bgClass = val >= 90 ? 'bg-emerald-50 border-emerald-200' : val >= 50 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
                   return (
-                    <div key={key} className={`rounded-lg border px-2 py-1.5 text-center ${color}`}>
-                      <div className="text-sm font-bold">{val}</div>
-                      <div className="text-xs opacity-70 leading-tight">{label}</div>
+                    <div key={key} className={`rounded border px-2 py-2 text-center ${bgClass}`}>
+                      <div className={`text-sm font-bold tabular-nums ${colorClass}`}>{val}</div>
+                      <div className="text-xs text-[#9C9690] leading-tight mt-0.5">{label}</div>
                     </div>
                   )
                 })}
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#9C9690]">
                 {([
                   { label: 'LCP', key: 'lcp' },
                   { label: 'CLS', key: 'cls' },
                   { label: 'TBT', key: 'tbt' },
                   { label: 'FCP', key: 'fcp' },
                 ] as { label: string; key: string }[]).map(({ label, key }) => (
-                  <span key={key}><span className="font-medium text-gray-700">{label}:</span> {(result.pagespeed as Record<string, unknown>)[key] as string}</span>
+                  <span key={key}><span className="font-medium text-[#6B6560]">{label}</span> {(result.pagespeed as Record<string, unknown>)[key] as string}</span>
                 ))}
               </div>
             </div>
           )}
 
-          {Array.isArray(result.seo_quick_wins) && (
-            <div>
-              <div className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-1">SEO Quick Wins</div>
-              <ul className="space-y-1">
-                {(result.seo_quick_wins as string[]).map((w, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex gap-1.5 items-start"><span className="text-orange-500 flex-shrink-0 mt-0.5">⚡</span>{w}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Biggest lever */}
           {result.biggest_lever && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <div className="text-xs font-semibold text-yellow-800 mb-1">Biggest Growth Lever</div>
-              <div className="text-xs text-gray-700">{result.biggest_lever as string}</div>
+            <div className="bg-[#F8F6F2] border border-[#E8E4DC] rounded-lg p-3">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-1.5">Biggest Opportunity</div>
+              <div className="text-xs text-[#1A1918] leading-relaxed">{result.biggest_lever as string}</div>
             </div>
           )}
 
-          {/* Opportunities */}
-          {Array.isArray(result.opportunities) && (
+          {Array.isArray(result.opportunities) && result.opportunities.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">Opportunities</div>
-              <ul className="space-y-1.5">
+              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Opportunities</div>
+              <ul className="space-y-2">
                 {(result.opportunities as Array<{title: string; description: string}>).map((o, i) => (
                   <li key={i} className="text-xs">
-                    <span className="font-medium text-gray-800">{o.title}:</span>{' '}
-                    <span className="text-gray-600">{o.description}</span>
+                    <span className="font-semibold text-[#1A1918]">{o.title}:</span>{' '}
+                    <span className="text-[#6B6560]">{o.description}</span>
                   </li>
                 ))}
               </ul>
@@ -360,27 +350,22 @@ export default function Home() {
 
   const startAudit = async () => {
     if (!url.trim()) return
-
     const targetUrl = url.startsWith('http') ? url : `https://${url}`
-
     setPhase('running')
     setStatusMsg('Connecting...')
     setCompositeScore(null)
-
     setUsageStats(null)
     setAuditModel('')
     setDurationSec(null)
     setAgentStates(
       Object.fromEntries(AGENTS.map((a) => [a.key, { status: 'running' as AgentStatus }]))
     )
-
     abortRef.current = new AbortController()
 
     try {
       const res = await fetch(`/api/audit?url=${encodeURIComponent(targetUrl)}`, {
         signal: abortRef.current.signal,
       })
-
       if (!res.ok || !res.body) throw new Error('API error')
 
       const reader = res.body.getReader()
@@ -400,34 +385,23 @@ export default function Home() {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6))
-
-            if (event.type === 'start' || event.type === 'fetched') {
-              setStatusMsg(event.message)
-            }
-
+            if (event.type === 'start' || event.type === 'fetched') setStatusMsg(event.message)
             if (event.type === 'agent_complete') {
               setAgentStates((prev) => ({
                 ...prev,
-                [event.key]: {
-                  status: 'complete' as AgentStatus,
-                  score: event.result.score,
-                  result: event.result,
-                },
+                [event.key]: { status: 'complete' as AgentStatus, score: event.result.score, result: event.result },
               }))
               setStatusMsg('Agents running...')
             }
-
             if (event.type === 'complete') {
               setCompositeScore(event.compositeScore)
               setUsageStats(event.usage)
               setAuditModel(event.model)
               setDurationSec(Math.round(event.durationMs / 100) / 10)
               setPhase('done')
-              setStatusMsg('Audit complete')
+              setStatusMsg('Analysis complete')
             }
-          } catch {
-            // skip malformed events
-          }
+          } catch { /* skip malformed events */ }
         }
       }
     } catch (err) {
@@ -457,7 +431,6 @@ export default function Home() {
     setAgentStates({})
     setCompositeScore(null)
     setStatusMsg('')
-
     setUsageStats(null)
     setAuditModel('')
     setDurationSec(null)
@@ -467,34 +440,31 @@ export default function Home() {
   const completedAgents = Object.values(agentStates).filter((a) => a.status === 'complete').length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-[#F4F2EF]">
       {/* Header */}
-      <header className="border-b border-white/10 px-6 py-4">
+      <header className="bg-white border-b border-[#E8E4DC] px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-white font-bold text-lg tracking-tight">Marketing Intelligence</h1>
-            <p className="text-slate-400 text-xs">5 parallel agents · Full-spectrum analysis</p>
+            <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence</h1>
+            <p className="text-[#9C9690] text-xs mt-0.5">Five-dimension website analysis</p>
           </div>
           {phase !== 'idle' && (
-            <button
-              onClick={reset}
-              className="text-slate-400 hover:text-white text-sm transition-colors"
-            >
-              ← New Audit
+            <button onClick={reset} className="text-[#6B6560] hover:text-[#1A1918] text-sm transition-colors">
+              New Audit
             </button>
           )}
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-12">
+      <main className="max-w-4xl mx-auto px-6 py-14">
         {phase === 'idle' && (
           <div className="text-center space-y-10">
             <div className="space-y-4">
-              <h2 className="text-5xl font-bold text-white tracking-tight">
-                Full Marketing Audit
+              <h2 className="font-display text-[#1A1918]" style={{ fontSize: 'clamp(2.4rem, 4.5vw, 3.8rem)', lineHeight: 1.1 }}>
+                Full Marketing Review
               </h2>
-              <p className="text-slate-400 text-xl max-w-xl mx-auto leading-relaxed">
-                Enter any website. Five specialists analyze content, conversion, SEO, competitive positioning, and brand strategy — all at once.
+              <p className="text-[#6B6560] text-lg max-w-xl mx-auto leading-relaxed">
+                Enter any website. Five specialist analyses — content, conversion, SEO, competitive positioning, and brand strategy — delivered simultaneously.
               </p>
             </div>
 
@@ -506,28 +476,28 @@ export default function Home() {
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && startAudit()}
                   placeholder="https://yourwebsite.com"
-                  className="flex-1 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
                 />
                 <button
                   onClick={startAudit}
                   disabled={!url.trim()}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-xl transition-colors text-sm whitespace-nowrap"
+                  className="bg-[#2D4A6E] hover:bg-[#243D5C] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-lg transition-colors text-sm whitespace-nowrap"
                 >
                   Run Audit
                 </button>
               </div>
-              <p className="text-slate-500 text-xs">Takes 30–60 seconds. No signup required.</p>
+              <p className="text-[#9C9690] text-xs">Takes 30–60 seconds. No account required.</p>
             </div>
 
-            {/* Agent preview dots */}
-            <div className="grid grid-cols-5 gap-4 max-w-2xl mx-auto pt-4">
+            {/* Agent preview */}
+            <div className="border-t border-[#E8E4DC] pt-8 grid grid-cols-5 gap-4 max-w-2xl mx-auto">
               {AGENTS.map((a) => (
                 <div key={a.key} className="text-center space-y-2">
-                  <div className="w-12 h-12 rounded-full bg-white/10 mx-auto flex items-center justify-center">
-                    <div className={`w-4 h-4 rounded-full ${COLOR_MAP[a.color].dot}`} />
+                  <div className="w-10 h-10 rounded-full border border-[#E8E4DC] bg-white mx-auto flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-[#2D4A6E]/25" />
                   </div>
-                  <div className="text-slate-400 text-xs leading-tight">{a.label}</div>
-                  <div className="text-slate-600 text-xs">{Math.round(a.weight * 100)}%</div>
+                  <div className="text-[#6B6560] text-xs leading-tight">{a.label}</div>
+                  <div className="text-[#C4BFB8] text-xs">{Math.round(a.weight * 100)}%</div>
                 </div>
               ))}
             </div>
@@ -535,35 +505,35 @@ export default function Home() {
         )}
 
         {(phase === 'running' || phase === 'done') && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Score hero */}
-            <div className="bg-white/5 rounded-2xl border border-white/10 p-6 flex items-center gap-6">
+            <div className="bg-white rounded-xl border border-[#E8E4DC] p-6 flex items-center gap-6">
               <div className="relative flex-shrink-0">
                 {compositeScore !== null ? (
                   <>
                     <ScoreRing score={compositeScore} size={96} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className={`text-2xl font-bold ${scoreColor(compositeScore)}`}>{compositeScore}</span>
-                      <span className="text-slate-400 text-xs">/100</span>
+                      <span className={`text-2xl font-bold tabular-nums ${scoreColor(compositeScore)}`}>{compositeScore}</span>
+                      <span className="text-[#9C9690] text-xs">/100</span>
                     </div>
                   </>
                 ) : (
-                  <div className="w-24 h-24 rounded-full border-4 border-white/10 border-t-blue-500 animate-spin" />
+                  <div className="w-24 h-24 rounded-full border-4 border-[#E8E4DC] border-t-[#2D4A6E] animate-spin" />
                 )}
               </div>
               <div className="flex-1">
-                <div className="text-white font-bold text-xl mb-1">
+                <div className="font-display text-[#1A1918] text-xl mb-1">
                   {compositeScore !== null
                     ? `Marketing Score: ${compositeScore}/100 — ${scoreLabel(compositeScore)}`
-                    : 'Running Marketing Audit...'}
+                    : 'Running Analysis...'}
                 </div>
-                <div className="text-slate-400 text-sm mb-3">{statusMsg}</div>
+                <div className="text-[#9C9690] text-sm mb-3">{statusMsg}</div>
                 {phase === 'running' && (
                   <div className="space-y-1.5">
-                    <div className="text-slate-500 text-xs">{completedAgents}/5 agents complete</div>
-                    <div className="bg-white/10 rounded-full h-1.5 w-56">
+                    <div className="text-[#9C9690] text-xs">{completedAgents} of 5 agents complete</div>
+                    <div className="bg-[#F0EDE8] rounded-full h-1 w-48">
                       <div
-                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-700"
+                        className="bg-[#2D4A6E] h-1 rounded-full transition-all duration-700"
                         style={{ width: `${(completedAgents / 5) * 100}%` }}
                       />
                     </div>
@@ -573,9 +543,9 @@ export default function Home() {
             </div>
 
             {/* Agent cards */}
-            <div className="space-y-3">
-              <div className="text-slate-400 text-xs font-semibold uppercase tracking-wide px-1">
-                Agent Results — click any card to expand
+            <div className="space-y-2">
+              <div className="text-[#9C9690] text-xs font-semibold uppercase tracking-widest px-1 pt-2">
+                Analysis Results
               </div>
               {AGENTS.map((agent) => (
                 <AgentCard
@@ -593,13 +563,13 @@ export default function Home() {
             )}
 
             {phase === 'done' && usageStats && (
-              <div className="bg-white/5 rounded-xl border border-white/10 px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-400">
-                <span className="font-medium text-slate-300">Run stats</span>
-                <span>⏱ {durationSec}s</span>
-                <span>🤖 {auditModel}</span>
-                <span>↑ {usageStats.inputTokens.toLocaleString()} in</span>
-                <span>↓ {usageStats.outputTokens.toLocaleString()} out</span>
-                <span>Σ {usageStats.totalTokens.toLocaleString()} tokens</span>
+              <div className="bg-white rounded-lg border border-[#E8E4DC] px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-[#9C9690]">
+                <span className="font-semibold text-[#6B6560]">Run details</span>
+                <span>Duration: {durationSec}s</span>
+                <span>Model: {auditModel}</span>
+                <span>Input: {usageStats.inputTokens.toLocaleString()} tokens</span>
+                <span>Output: {usageStats.outputTokens.toLocaleString()} tokens</span>
+                <span>Total: {usageStats.totalTokens.toLocaleString()}</span>
               </div>
             )}
 
@@ -607,13 +577,13 @@ export default function Home() {
               <div className="flex justify-center gap-3 pt-2">
                 <button
                   onClick={downloadReport}
-                  className="bg-white/10 hover:bg-white/20 text-white text-sm px-6 py-2.5 rounded-xl transition-colors"
+                  className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
                 >
-                  Download Report (.md)
+                  Download Report
                 </button>
                 <button
                   onClick={reset}
-                  className="bg-white/10 hover:bg-white/20 text-white text-sm px-6 py-2.5 rounded-xl transition-colors"
+                  className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
                 >
                   Audit Another Site
                 </button>

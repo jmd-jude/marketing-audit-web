@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,9 +12,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const dmSerifDisplay = DM_Serif_Display({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: "400",
+});
+
 export const metadata: Metadata = {
-  title: "Marketing Intelligence — AI-Powered Website Audit",
-  description: "Full-spectrum marketing audit powered by 5 parallel AI agents. Analyze content, conversion, SEO, competitive positioning, and brand strategy.",
+  title: "Marketing Intelligence",
+  description: "Five-dimension website analysis. Content, conversion, SEO, competitive positioning, and brand strategy — delivered simultaneously.",
 };
 
 export default function RootLayout({
@@ -25,7 +31,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

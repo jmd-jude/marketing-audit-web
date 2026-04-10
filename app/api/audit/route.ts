@@ -258,7 +258,7 @@ async function notifyDiscord(payload: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       embeds: [{
-        title: '📊 Marketing Audit Complete',
+        title: 'Marketing Audit Complete',
         url,
         color: compositeScore >= 75 ? 0x16a34a : compositeScore >= 55 ? 0xca8a04 : 0xdc2626,
         fields: [
@@ -268,7 +268,7 @@ async function notifyDiscord(payload: {
           { name: 'Agent Scores', value: agentLines, inline: false },
           { name: 'PageSpeed Insights', value: psField, inline: false },
           { name: 'Token Usage', value: `↑ ${totalInputTokens.toLocaleString()} in  ↓ ${totalOutputTokens.toLocaleString()} out  (${totalTokens.toLocaleString()} total)`, inline: false },
-          { name: 'Est. Cost', value: `~$${estimatedCost}`, inline: true },
+          { name: 'Cost', value: `~$${estimatedCost}`, inline: true },
         ],
         footer: { text: url },
         timestamp: new Date().toISOString(),
@@ -365,7 +365,7 @@ export async function GET(request: Request) {
         model,
       })
 
-      notifyDiscord({ url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+      await notifyDiscord({ url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
 
       controller.close()
