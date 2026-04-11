@@ -22,29 +22,29 @@
   Client-side generation from audit state. Strong pitch closer — hand the client a file at the end of the screen share.
   _Status: Shipped — downloads as `marketing-audit-{domain}.md`_
 
-- [ ] **`robots.txt` + `sitemap.xml` fetch**
-  Pull these directly alongside the homepage HTML. Gives the technical agent real crawlability data instead of inference.
-  _Effort: S | Impact: M_
+- [x] **`robots.txt` + `sitemap.xml` fetch**
+  Fetched in parallel with homepage HTML. Passed to technical agent for real crawlability data.
+  _Status: Shipped — `fetchRobotsAndSitemap()` in `app/api/audit/route.ts`_
 
-- [ ] **Google PageSpeed API key**
-  Currently running unauthenticated (rate-limited). Add `GOOGLE_PAGESPEED_API_KEY` env var for production reliability.
-  _Effort: XS | Impact: L_
+- [x] **Google PageSpeed API key**
+  `GOOGLE_PAGESPEED_API_KEY` env var in place for production reliability.
+  _Status: Shipped_
 
 ---
 
 ### Tier 2 — Client Grants Access (OAuth / Service Account)
 
-- [ ] **Google Analytics 4 API**
-  Client adds service account as viewer on their GA4 property. Unlocks: real traffic volumes, channel breakdown, conversion rates, bounce rates, session data. Transforms the growth/strategy agent from inference to evidence.
-  _Effort: L | Impact: H_
+- [x] **Google Analytics 4 API**
+  Operator connects their Google account (which has viewer access to client's GA4 property). Unlocks: real traffic volumes, channel breakdown, conversion rates, bounce rates, session data. Transforms the growth/strategy agent from inference to evidence.
+  _Status: Shipped — `lib/gsc-ga4.ts`, `/api/connected-data`, GA4 property auto-discovered at connect time_
 
-- [ ] **Google Search Console API**
-  Same service account grant. Unlocks: organic keyword impressions, CTR, average position, index coverage, Core Web Vitals field data. Massive upgrade to SEO agent accuracy.
-  _Effort: L | Impact: H_
+- [x] **Google Search Console API**
+  Same operator OAuth grant. Unlocks: organic keyword impressions, CTR, average position, index coverage. Passed to technical, strategy, competitive, and content agents.
+  _Status: Shipped — `lib/gsc-ga4.ts`, `/api/connected-data`_
 
-- [ ] **OAuth connect flow UI**
-  "Connect your Google account" step before or during audit. Stores tokens per audit session (or per saved client profile). Gate on the Connected tier.
-  _Effort: L | Impact: H_
+- [x] **OAuth connect flow UI**
+  "Connect Google Analytics & Search Console" strip on landing page. Tokens stored in encrypted HttpOnly JWT cookie (24h session). Connect/Disconnect UI with live status indicator.
+  _Status: Shipped — `/api/auth/{connect,callback,status,disconnect}`, connect strip in `app/page.tsx`_
 
 ---
 
