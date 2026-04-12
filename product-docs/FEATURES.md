@@ -41,14 +41,13 @@ A run stats bar displays after each audit: model used, duration, total tokens co
 - **Multi-page crawling**: Analysis is limited to the homepage URL provided.
 - **Historical comparison**: No audit history or trend tracking (localStorage/DB is on the roadmap, not built).
 - **White-labeling**: The tool is currently unbranded (agency name / logo not configurable).
-- **Live connected integrations**: GA4, Search Console, and paid tool APIs are in the UI as "coming soon" — the connection flows are not functional yet.
 
 ---
 
 ## Known Limitations
 
 - **Homepage-only**: Agents analyze only the fetched homepage HTML (truncated to 15k chars). Interior pages, blog posts, and landing pages are not analyzed.
-- **Inference-heavy without connected data**: At the Standard tier, agents infer tracking setup, competitor landscape, and traffic channels from HTML signals only. Real data (GA4, GSC) would materially improve accuracy for several agents.
+- **Inference-heavy without connected data**: At the Standard tier, agents infer tracking setup, competitor landscape, and traffic channels from HTML signals only. Real data (GA4, GSC) materially improves accuracy for several agents.
 - **No audit persistence**: Results are lost on page refresh. No localStorage or database backing.
 - **Rate-limited PageSpeed**: Without a Google API key, PageSpeed calls hit the unauthenticated rate limit — may degrade under concurrent load.
 - **Single-threaded UI**: Only one audit can run at a time per browser session.
