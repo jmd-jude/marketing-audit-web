@@ -563,7 +563,7 @@ export default function Home() {
   const [inviteCode, setInviteCode] = useState('')
   const [inviteError, setInviteError] = useState('')
   const [auditCount, setAuditCount] = useState(0)
-  const [googleConnected, setGoogleConnected] = useState(false)
+  const [dataConnected, setDataConnected] = useState(false)
   const [summaryStatus, setSummaryStatus] = useState<'idle' | 'running' | 'complete'>('idle')
   const [summaryResult, setSummaryResult] = useState<ExecutiveSummary | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -573,20 +573,8 @@ export default function Home() {
     const count = parseInt(localStorage.getItem('audit_count') ?? '0', 10)
     setSavedCode(code)
     setAuditCount(count)
-    // Check OAuth connection status and handle redirect params
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('connected') === '1') {
-      window.history.replaceState({}, '', '/')
-    }
-    fetch('/api/auth/status').then((r) => r.json()).then((d) => {
-      if (d.connected) setGoogleConnected(true)
-    }).catch(() => {})
   }, [])
 
-  const handleDisconnect = async () => {
-    await fetch('/api/auth/disconnect', { method: 'POST' })
-    setGoogleConnected(false)
-  }
 
   const startAudit = async () => {
     if (!url.trim()) return
@@ -637,7 +625,10 @@ export default function Home() {
             const event = JSON.parse(line.slice(6))
             if (event.type === 'start' || event.type === 'fetched') {
               setStatusMsg(event.message)
-              if (event.type === 'fetched' && event.metadata) setPageMetadata(event.metadata)
+              if (event.type === 'fetched') {
+                if (event.metadata) setPageMetadata(event.metadata)
+                if (event.connected) setDataConnected(true)
+              }
             }
             if (event.type === 'agent_complete') {
               setAgentStates((prev) => ({
@@ -820,34 +811,6 @@ export default function Home() {
                 Takes 30–60 seconds.{auditCount > 0 ? ` ${RUN_LIMIT - auditCount} of ${RUN_LIMIT} complimentary audits remaining.` : ''}
               </p>
 
-              {/* Google OAuth connect strip */}
-              <div className="flex items-center justify-between bg-[#F8F6F2] border border-[#E8E4DC] rounded-lg px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  {googleConnected ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                  ) : (
-                    <span className="w-2 h-2 rounded-full bg-[#D4CFC8] flex-shrink-0" />
-                  )}
-                  <span className="text-xs text-[#6B6560]">
-                    {googleConnected ? 'Google Analytics & Search Console connected' : 'Connect Google Analytics & Search Console for richer analysis'}
-                  </span>
-                </div>
-                {googleConnected ? (
-                  <button
-                    onClick={handleDisconnect}
-                    className="text-xs text-[#9C9690] hover:text-[#6B6560] transition-colors ml-3 flex-shrink-0"
-                  >
-                    Disconnect
-                  </button>
-                ) : (
-                  <a
-                    href="/api/auth/connect"
-                    className="text-xs text-[#2D4A6E] border border-[#2D4A6E]/30 hover:border-[#2D4A6E] px-2.5 py-1 rounded transition-colors ml-3 flex-shrink-0"
-                  >
-                    Connect
-                  </a>
-                )}
-              </div>
             </div>
 
             {/* Agent preview */}
@@ -930,7 +893,7 @@ export default function Home() {
                 hasPageSpeed={!!Object.values(agentStates).find(
                   (s) => s.result && (s.result as Record<string, unknown>).pagespeed
                 )}
-                googleConnected={googleConnected}
+                googleConnected={dataConnected}
               />
             )}
 

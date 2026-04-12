@@ -28,47 +28,37 @@ export interface ConnectedData {
 
 const NOISY_EVENTS = new Set(['session_start', 'first_visit', 'page_view'])
 
-function makeOAuth2Client() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI,
-  )
-}
-
-export function getAuthUrl(state: string): string {
-  const oauth2Client = makeOAuth2Client()
-  return oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/webmasters.readonly',
-      'https://www.googleapis.com/auth/analytics.readonly',
-    ],
-    state,
-    prompt: 'consent',
-  })
-}
-
-export async function exchangeCodeForTokens(code: string) {
-  const oauth2Client = makeOAuth2Client()
-  const { tokens } = await oauth2Client.getToken(code)
-  return tokens
-}
-
-// After OAuth, discover the GA4 property ID matching a domain (stored in session at callback time)
-export async function discoverGa4PropertyId(accessToken: string, refreshToken: string, domain: string): Promise<string | null> {
+function getServiceAccountAuth() {
+  const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!keyJson) return null
   try {
-    const oauth2Client = makeOAuth2Client()
-    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
-    const admin = google.analyticsadmin({ version: 'v1alpha', auth: oauth2Client })
+    const credentials = JSON.parse(keyJson)
+    return new google.auth.GoogleAuth({
+      credentials,
+      scopes: [
+        'https://www.googleapis.com/auth/webmasters.readonly',
+        'https://www.googleapis.com/auth/analytics.readonly',
+      ],
+    })
+  } catch {
+    return null
+  }
+}
+
+export async function discoverGa4PropertyId(domain: string): Promise<string | null> {
+  try {
+    const auth = getServiceAccountAuth()
+    if (!auth) return null
+
+    const admin = google.analyticsadmin({ version: 'v1alpha', auth })
     const res = await admin.accountSummaries.list({})
     const summaries = res.data.accountSummaries ?? []
-    const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase()
+    const cleanDomain = domain.replace(/^www\./, '').toLowerCase()
 
     for (const account of summaries) {
       for (const prop of (account.propertySummaries ?? []) as analyticsadmin_v1alpha.Schema$GoogleAnalyticsAdminV1alphaPropertySummary[]) {
         const propName = prop.property ?? ''
-        const displayName = (prop.displayName ?? '').toLowerCase()
+        const displayName = (prop.displayName ?? '').toLowerCase().replace(/^www\./, '')
         if (displayName.includes(cleanDomain) || cleanDomain.includes(displayName)) {
           const id = propName.replace('properties/', '')
           if (id) return id
@@ -85,12 +75,12 @@ export async function discoverGa4PropertyId(accessToken: string, refreshToken: s
   }
 }
 
-export async function fetchGscData(accessToken: string, refreshToken: string, siteUrl: string): Promise<GscData | null> {
+export async function fetchGscData(siteUrl: string): Promise<GscData | null> {
   try {
-    const oauth2Client = makeOAuth2Client()
-    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
+    const auth = getServiceAccountAuth()
+    if (!auth) return null
 
-    const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client })
+    const webmasters = google.webmasters({ version: 'v3', auth })
 
     const now = new Date()
 
@@ -207,17 +197,17 @@ export async function fetchGscData(accessToken: string, refreshToken: string, si
   }
 }
 
-export async function fetchGa4Data(accessToken: string, refreshToken: string, propertyId: string): Promise<Ga4Data | null> {
+export async function fetchGa4Data(propertyId: string): Promise<Ga4Data | null> {
   try {
-    const oauth2Client = makeOAuth2Client()
-    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
+    const auth = getServiceAccountAuth()
+    if (!auth) return null
 
-    const analyticsData = google.analyticsdata({ version: 'v1beta', auth: oauth2Client })
+    const analyticsData = google.analyticsdata({ version: 'v1beta', auth })
     const endDate = 'today'
     const startDate = '90daysAgo'
 
     const [channelRes, pagesRes, newReturnRes, conversionsByChannelRes, deviceRes, engagementTimeRes, eventsRes] = await Promise.allSettled([
-      // Sessions by channel (existing)
+      // Sessions by channel
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
@@ -227,7 +217,7 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
           orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
         },
       }),
-      // Top landing pages with engagement quality (replaces simple pagePath report)
+      // Top landing pages with engagement quality
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
@@ -238,7 +228,7 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
           limit: '10',
         },
       }),
-      // New vs returning (existing)
+      // New vs returning
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
@@ -323,7 +313,6 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
         const bounce = parseFloat(row.metricValues?.[2]?.value ?? '0')
         if (dim === 'new') newSessions = sessions
         if (dim === 'returning') returningSessions = sessions
-        // Weight by session count so a 900-new / 100-returning split isn't averaged 50/50
         totalEngagement += eng * sessions
         totalBounce += bounce * sessions
         totalSessions += sessions

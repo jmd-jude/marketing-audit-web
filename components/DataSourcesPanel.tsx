@@ -87,21 +87,24 @@ function ConnectModal({ source, onClose }: { source: DataSource; onClose: () => 
         {source.id === 'ga4' || source.id === 'gsc' ? (
           <>
             <div className="bg-[#F4F2EF] border border-[#E8E4DC] rounded-lg p-4 mb-4 text-xs text-[#6B6560] space-y-2">
-              <div className="font-semibold text-[#1A1918]">How it works</div>
+              <div className="font-semibold text-[#1A1918]">How to enable</div>
               <ol className="space-y-1.5 list-decimal list-inside">
-                <li>Your client adds our service account as a Viewer on their {source.id === 'ga4' ? 'GA4 property' : 'Search Console'}</li>
-                <li>Click Connect below to authenticate</li>
-                <li>Future audits on this domain include real {source.id === 'ga4' ? 'traffic and conversion' : 'keyword and ranking'} data</li>
+                {source.id === 'ga4' ? (
+                  <>
+                    <li>In GA4, go to Admin → Account Access Management</li>
+                    <li>Add our service account email as a Viewer</li>
+                    <li>Future audits on this domain will automatically include real traffic and conversion data</li>
+                  </>
+                ) : (
+                  <>
+                    <li>In Search Console, go to Settings → Users and Permissions</li>
+                    <li>Add our service account email as a Full User</li>
+                    <li>Future audits on this domain will automatically include keyword and ranking data</li>
+                  </>
+                )}
               </ol>
+              <p className="pt-1 text-[#9C9690]">Contact your account manager for the service account email address.</p>
             </div>
-            <button
-              disabled
-              className="w-full bg-[#F4F2EF] border border-[#E8E4DC] text-[#9C9690] font-semibold py-2.5 rounded-lg text-sm cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              Connect Google Account
-              <span className="text-xs bg-[#E8E4DC] text-[#9C9690] px-2 py-0.5 rounded">Coming soon</span>
-            </button>
-            <p className="text-[#C4BFB8] text-xs text-center mt-2">Part of the Connected tier</p>
           </>
         ) : (
           <>
@@ -225,7 +228,7 @@ export function DataSourcesPanel({ hasPageSpeed, googleConnected = false }: { ha
             </div>
 
             <div className="pt-1 border-t border-[#F0EDE8] text-xs text-[#C4BFB8]">
-              Connect GA4 and Search Console to upgrade analysis quality. Client grants viewer access — no credentials shared.
+              GA4 and Search Console data loads automatically when access has been granted. No login required.
             </div>
           </div>
         )}

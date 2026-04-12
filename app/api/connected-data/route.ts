@@ -1,45 +1,24 @@
 // Node.js runtime (NOT edge) — googleapis uses Node.js modules incompatible with Edge runtime
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
-import { fetchGscData, fetchGa4Data, formatGscContext, formatGa4Context } from '@/lib/gsc-ga4'
-
-const SESSION_COOKIE = 'goog_session'
-
-function getSecretKey() {
-  const secret = process.env.SESSION_SECRET
-  if (!secret) return null
-  return new TextEncoder().encode(secret)
-}
-
-interface SessionPayload {
-  accessToken: string
-  refreshToken: string
-  expiryDate: number | null
-  ga4PropertyId: string | null
-}
+import { fetchGscData, fetchGa4Data, formatGscContext, formatGa4Context, discoverGa4PropertyId } from '@/lib/gsc-ga4'
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value
-  if (!token) return NextResponse.json({ gscContext: null, ga4Context: null })
+  const siteUrl = request.nextUrl.searchParams.get('siteUrl') ?? ''
+  if (!siteUrl) return NextResponse.json({ gscContext: null, ga4Context: null })
 
-  const secretKey = getSecretKey()
-  if (!secretKey) return NextResponse.json({ gscContext: null, ga4Context: null })
-
-  let session: SessionPayload
+  let domain: string
   try {
-    const { payload } = await jwtVerify(token, secretKey)
-    session = payload as unknown as SessionPayload
+    domain = new URL(siteUrl).hostname
   } catch {
     return NextResponse.json({ gscContext: null, ga4Context: null })
   }
 
-  const siteUrl = request.nextUrl.searchParams.get('siteUrl') ?? ''
+  // Discover GA4 property matching this domain, then fetch both in parallel
+  const ga4PropertyId = await discoverGa4PropertyId(domain)
 
   const [gscData, ga4Data] = await Promise.allSettled([
-    fetchGscData(session.accessToken, session.refreshToken, siteUrl),
-    session.ga4PropertyId
-      ? fetchGa4Data(session.accessToken, session.refreshToken, session.ga4PropertyId)
-      : Promise.resolve(null),
+    fetchGscData(siteUrl),
+    ga4PropertyId ? fetchGa4Data(ga4PropertyId) : Promise.resolve(null),
   ])
 
   const gscContext = gscData.status === 'fulfilled' && gscData.value ? formatGscContext(gscData.value) : null

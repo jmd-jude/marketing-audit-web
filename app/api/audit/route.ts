@@ -1,39 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AGENTS, WEIGHTS, AgentKey, SUMMARY_SYSTEM_PROMPT } from '@/lib/agents'
-import { jwtVerify } from 'jose'
 
 export const runtime = 'edge'
 export const maxDuration = 120
-
-const SESSION_COOKIE = 'goog_session'
-
-function getSecretKey() {
-  const secret = process.env.SESSION_SECRET
-  if (!secret) return null
-  return new TextEncoder().encode(secret)
-}
-
-interface SessionPayload {
-  accessToken: string
-  refreshToken: string
-  expiryDate: number | null
-  ga4PropertyId: string | null
-}
-
-async function getSessionTokens(request: Request): Promise<SessionPayload | null> {
-  try {
-    const cookieHeader = request.headers.get('cookie') ?? ''
-    const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`))
-    const token = match?.[1]
-    if (!token) return null
-    const secretKey = getSecretKey()
-    if (!secretKey) return null
-    const { payload } = await jwtVerify(token, secretKey)
-    return payload as unknown as SessionPayload
-  } catch {
-    return null
-  }
-}
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -42,6 +11,7 @@ const client = new Anthropic({
 interface AgentRunResult {
   key: AgentKey
   result: Record<string, unknown>
+  userMessage: string
   usage: { input_tokens: number; output_tokens: number }
 }
 
@@ -286,18 +256,22 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
   })
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  console.log(`[agent:${agentKey}] stop_reason=${message.stop_reason} in=${message.usage.input_tokens} out=${message.usage.output_tokens}${additionalContext ? ` context=${additionalContext.length}chars` : ''}`)
+
   const cleaned = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
 
   let result: Record<string, unknown>
   try {
     result = JSON.parse(cleaned)
   } catch {
+    console.error(`[agent:${agentKey}] JSON parse failed | raw[:200]:`, cleaned.slice(0, 200))
     result = { score: 50, error: 'Parse error', raw: cleaned.slice(0, 200) }
   }
 
   return {
     key: agentKey,
     result,
+    userMessage,
     usage: {
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
@@ -319,12 +293,15 @@ async function runSummaryAgent(
 
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: SUMMARY_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   })
 
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  console.log('[summary] stop_reason:', message.stop_reason, '| output_tokens:', message.usage.output_tokens)
+  console.log('[summary] raw response:', text.slice(0, 500))
+
   // Extract the outermost JSON object, ignoring any surrounding prose or code fences
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   const cleaned = jsonMatch ? jsonMatch[0] : text.trim()
@@ -332,7 +309,9 @@ async function runSummaryAgent(
   let result: Record<string, unknown>
   try {
     result = JSON.parse(cleaned)
-  } catch {
+    console.log('[summary] parsed OK — keys:', Object.keys(result).join(', '))
+  } catch (e) {
+    console.error('[summary] JSON parse failed:', e, '| cleaned[:200]:', cleaned.slice(0, 200))
     result = { error: 'Parse error', raw: cleaned.slice(0, 200) }
   }
 
@@ -342,6 +321,69 @@ async function runSummaryAgent(
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
     },
+  }
+}
+
+async function writeAuditLog(origin: string, payload: {
+  timestamp: string
+  auditor: string
+  url: string
+  connected: boolean
+  compositeScore: number
+  durationMs: number
+  model: string
+  gscContext: string | null
+  ga4Context: string | null
+  agents: Array<{
+    key: string
+    score: number
+    inputTokens: number
+    outputTokens: number
+    userMessage: string
+    result: Record<string, unknown>
+  }>
+  summary: Record<string, unknown> | null
+  summaryTokens: { input: number; output: number }
+}) {
+  try {
+    const lines: string[] = []
+    const sep = '─'.repeat(60)
+    lines.push(`\n${sep}`)
+    lines.push(`${payload.timestamp}  ${payload.url}`)
+    lines.push(`Auditor: ${payload.auditor} | Score: ${payload.compositeScore}/100 | ${(payload.durationMs / 1000).toFixed(1)}s | ${payload.model}`)
+    lines.push(`Connected: ${payload.connected}`)
+    if (payload.gscContext) {
+      lines.push(`\nGSC Context (${payload.gscContext.length} chars):\n${payload.gscContext}`)
+    }
+    if (payload.ga4Context) {
+      lines.push(`\nGA4 Context (${payload.ga4Context.length} chars):\n${payload.ga4Context}`)
+    }
+    for (const agent of payload.agents) {
+      lines.push(`\n[${agent.key}] score=${agent.score} in=${agent.inputTokens} out=${agent.outputTokens}`)
+      lines.push(`--- user message (${agent.userMessage.length} chars) ---\n${agent.userMessage}\n--- end user message ---`)
+      if (agent.result.dimensions) {
+        const dims = agent.result.dimensions as Array<{ name: string; score: number; finding: string }>
+        for (const d of dims) lines.push(`  ${d.name}: ${d.score}/10 — ${d.finding}`)
+      }
+      if (agent.result.biggest_lever) lines.push(`  biggest_lever: ${agent.result.biggest_lever}`)
+      if (agent.result.critical_fixes) {
+        const fixes = agent.result.critical_fixes as string[]
+        for (const f of fixes.slice(0, 3)) lines.push(`  fix: ${f}`)
+      }
+    }
+    if (payload.summary) {
+      lines.push(`\n[summary] in=${payload.summaryTokens.input} out=${payload.summaryTokens.output}`)
+      lines.push(JSON.stringify(payload.summary, null, 2))
+    }
+    lines.push(sep)
+
+    await fetch(`${origin}/api/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: lines.join('\n'), data: payload }),
+    })
+  } catch {
+    // non-critical
   }
 }
 
@@ -464,25 +506,37 @@ export async function GET(request: Request) {
 
       notifyDiscordStart({ name, company, url: targetUrl }).catch(() => { /* non-critical */ })
 
-      const isConnected = (await getSessionTokens(request)) !== null
-
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
-      // Fetch HTML, PageSpeed, crawl data, and optionally GSC/GA4 in parallel
-      // GSC/GA4 is fetched via /api/connected-data (Node runtime) to avoid Edge/googleapis conflict
+      // Fetch HTML, PageSpeed, crawl data, and GSC/GA4 in parallel.
+      // GSC/GA4 is fetched via /api/connected-data (Node runtime) to avoid Edge/googleapis conflict.
+      // Service account auth is handled server-side — no session needed.
       const origin = new URL(request.url).origin
       const [pageData, pageSpeed, crawlData, connectedData] = await Promise.all([
         fetchPageContent(targetUrl),
         fetchPageSpeed(targetUrl),
         fetchRobotsAndSitemap(targetUrl),
-        isConnected
-          ? fetch(`${origin}/api/connected-data?siteUrl=${encodeURIComponent(targetUrl)}`, {
-              headers: { cookie: request.headers.get('cookie') ?? '' },
-            }).then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
-          : Promise.resolve({ gscContext: null, ga4Context: null }),
+        fetch(`${origin}/api/connected-data?siteUrl=${encodeURIComponent(targetUrl)}`)
+          .then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
+          .catch(() => ({ gscContext: null, ga4Context: null })),
       ])
       const { content: pageContent, metadata: pageMetadata } = pageData
       const { gscContext, ga4Context } = connectedData
+      const isConnected = gscContext !== null || ga4Context !== null
+
+      // Data pipeline visibility log
+      console.log(`\n[audit] ── ${targetUrl} ──────────────────────`)
+      console.log(`[audit] HTML: ${pageContent.length} chars | PageSpeed: ${pageSpeed ? `perf=${pageSpeed.scores.performance}` : 'unavailable'} | crawl: ${crawlData ? `${crawlData.length} chars` : 'none'}`)
+      if (gscContext) {
+        console.log(`[audit] GSC context (${gscContext.length} chars):\n${gscContext.slice(0, 800)}`)
+      } else {
+        console.log('[audit] GSC context: none')
+      }
+      if (ga4Context) {
+        console.log(`[audit] GA4 context (${ga4Context.length} chars):\n${ga4Context.slice(0, 800)}`)
+      } else {
+        console.log('[audit] GA4 context: none')
+      }
 
       send({
         type: 'fetched',
@@ -523,6 +577,7 @@ export async function GET(request: Request) {
           const fallback: AgentRunResult = {
             key,
             result: { score: 0, error: String(err) },
+            userMessage: '',
             usage: { input_tokens: 0, output_tokens: 0 },
           }
           send({ type: 'agent_complete', key, result: fallback.result, usage: fallback.usage })
@@ -541,9 +596,11 @@ export async function GET(request: Request) {
       // Run executive summary agent after all five complete
       send({ type: 'summary_running', message: 'Generating executive summary...' })
       let summaryUsage = { input_tokens: 0, output_tokens: 0 }
+      let summaryResult: Record<string, unknown> | null = null
       try {
         const summary = await runSummaryAgent(results)
         summaryUsage = summary.usage
+        summaryResult = summary.result
         send({ type: 'summary_complete', result: summary.result, usage: summary.usage })
       } catch {
         send({ type: 'summary_complete', result: { error: 'Summary generation failed' }, usage: summaryUsage })
@@ -569,6 +626,29 @@ export async function GET(request: Request) {
         durationMs,
         model,
       })
+
+      const auditor = company ? `${name} @ ${company}` : name
+      writeAuditLog(origin, {
+        timestamp: new Date().toISOString(),
+        auditor,
+        url: targetUrl,
+        connected: isConnected,
+        compositeScore,
+        durationMs,
+        model,
+        gscContext,
+        ga4Context,
+        agents: results.map(({ key, result, userMessage, usage }) => ({
+          key,
+          score: (result.score as number) || 0,
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          userMessage,
+          result,
+        })),
+        summary: summaryResult,
+        summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
+      }).catch(() => { /* non-critical */ })
 
       await notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
