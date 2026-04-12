@@ -30,9 +30,13 @@ const NOISY_EVENTS = new Set(['session_start', 'first_visit', 'page_view'])
 
 function getServiceAccountAuth() {
   const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-  if (!keyJson) return null
+  if (!keyJson) {
+    console.error('[gsc-ga4] GOOGLE_SERVICE_ACCOUNT_KEY is not set')
+    return null
+  }
   try {
     const credentials = JSON.parse(keyJson)
+    console.log(`[gsc-ga4] Service account auth created for: ${credentials.client_email}`)
     return new google.auth.GoogleAuth({
       credentials,
       scopes: [
@@ -40,7 +44,8 @@ function getServiceAccountAuth() {
         'https://www.googleapis.com/auth/analytics.readonly',
       ],
     })
-  } catch {
+  } catch (err) {
+    console.error('[gsc-ga4] Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:', err)
     return null
   }
 }
@@ -70,7 +75,46 @@ export async function discoverGa4PropertyId(domain: string): Promise<string | nu
     const firstProp = summaries[0]?.propertySummaries?.[0] as analyticsadmin_v1alpha.Schema$GoogleAnalyticsAdminV1alphaPropertySummary | undefined
     const firstId = firstProp?.property?.replace('properties/', '')
     return firstId ?? null
-  } catch {
+  } catch (err) {
+    console.error('[gsc-ga4] discoverGa4PropertyId error:', err)
+    return null
+  }
+}
+
+// Try to resolve the canonical GSC siteUrl for a given URL.
+// GSC properties can be URL-prefix (https://www.example.com/) or domain (sc-domain:example.com).
+// We list all verified sites and find the best match rather than guessing.
+async function resolveGscSiteUrl(targetUrl: string): Promise<string | null> {
+  try {
+    const auth = getServiceAccountAuth()
+    if (!auth) return null
+    const webmasters = google.webmasters({ version: 'v3', auth })
+    const res = await webmasters.sites.list()
+    const sites = res.data.siteEntry ?? []
+    console.log(`[gsc-ga4] GSC accessible sites: ${sites.map((s) => s.siteUrl).join(', ')}`)
+
+    const target = new URL(targetUrl)
+    const domain = target.hostname.replace(/^www\./, '')
+
+    // Prefer domain property match, fall back to URL prefix
+    const domainProp = sites.find((s) => s.siteUrl === `sc-domain:${domain}`)
+    if (domainProp?.siteUrl) return domainProp.siteUrl
+
+    // URL prefix — try exact, then with/without www
+    const urlPrefixes = [
+      targetUrl.endsWith('/') ? targetUrl : `${targetUrl}/`,
+      `https://www.${domain}/`,
+      `https://${domain}/`,
+    ]
+    for (const prefix of urlPrefixes) {
+      const match = sites.find((s) => s.siteUrl === prefix)
+      if (match?.siteUrl) return match.siteUrl
+    }
+
+    console.warn(`[gsc-ga4] No GSC property found for ${targetUrl}`)
+    return null
+  } catch (err) {
+    console.error('[gsc-ga4] resolveGscSiteUrl error:', err)
     return null
   }
 }
@@ -79,6 +123,11 @@ export async function fetchGscData(siteUrl: string): Promise<GscData | null> {
   try {
     const auth = getServiceAccountAuth()
     if (!auth) return null
+
+    // Resolve to the exact GSC property URL (handles domain vs URL-prefix properties)
+    const resolvedSiteUrl = await resolveGscSiteUrl(siteUrl)
+    if (!resolvedSiteUrl) return null
+    console.log(`[gsc-ga4] fetchGscData using siteUrl: ${resolvedSiteUrl}`)
 
     const webmasters = google.webmasters({ version: 'v3', auth })
 
@@ -103,28 +152,28 @@ export async function fetchGscData(siteUrl: string): Promise<GscData | null> {
 
     const [queriesRes, pagesRes, recentTrendRes, priorTrendRes, sitemapsRes] = await Promise.allSettled([
       webmasters.searchanalytics.query({
-        siteUrl,
+        siteUrl: resolvedSiteUrl,
         requestBody: { ...mainDateRange, dimensions: ['query'], rowLimit: 50 },
       }),
       webmasters.searchanalytics.query({
-        siteUrl,
+        siteUrl: resolvedSiteUrl,
         requestBody: { ...mainDateRange, dimensions: ['page'], rowLimit: 20 },
       }),
       webmasters.searchanalytics.query({
-        siteUrl,
+        siteUrl: resolvedSiteUrl,
         requestBody: {
           startDate: recent30Start.toISOString().split('T')[0],
           endDate: recent30End,
         },
       }),
       webmasters.searchanalytics.query({
-        siteUrl,
+        siteUrl: resolvedSiteUrl,
         requestBody: {
           startDate: prior30Start.toISOString().split('T')[0],
           endDate: prior30End.toISOString().split('T')[0],
         },
       }),
-      webmasters.sitemaps.list({ siteUrl }),
+      webmasters.sitemaps.list({ siteUrl: resolvedSiteUrl }),
     ])
 
     const topQueries = queriesRes.status === 'fulfilled'
