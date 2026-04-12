@@ -32,6 +32,19 @@ interface UsageStats {
   costUsd: number
 }
 
+interface ExecutiveSummary {
+  overall_verdict: string
+  top_priorities: Array<{
+    rank: number
+    area: string
+    finding: string
+    why_it_matters: string
+    action: string
+  }>
+  biggest_strength: string
+  quick_wins: string[]
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyResult = Record<string, any>
 
@@ -43,8 +56,8 @@ function scoreColor(score: number) {
 
 function scoreLabel(score: number) {
   if (score >= 80) return 'Strong'
-  if (score >= 65) return 'Good'
-  if (score >= 50) return 'Fair'
+  if (score >= 65) return 'Average'
+  if (score >= 50) return 'Below Average'
   if (score >= 35) return 'Weak'
   return 'Critical'
 }
@@ -56,6 +69,7 @@ function generateMarkdownReport(
   usageStats: UsageStats,
   auditModel: string,
   durationSec: number,
+  summary?: ExecutiveSummary | null,
 ): string {
   const lines: string[] = []
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -68,6 +82,36 @@ function generateMarkdownReport(
   lines.push('')
   lines.push('---')
   lines.push('')
+
+  if (summary?.overall_verdict) {
+    lines.push('## Executive Summary')
+    lines.push(summary.overall_verdict)
+    lines.push('')
+
+    if (Array.isArray(summary.top_priorities) && summary.top_priorities.length > 0) {
+      lines.push('### Top Priorities')
+      for (const p of summary.top_priorities) {
+        lines.push(`**${p.rank}. ${p.finding}** (${p.area})`)
+        lines.push(`${p.why_it_matters}`)
+        lines.push(`→ ${p.action}`)
+        lines.push('')
+      }
+    }
+
+    if (summary.biggest_strength) {
+      lines.push(`**Biggest Strength:** ${summary.biggest_strength}`)
+      lines.push('')
+    }
+
+    if (Array.isArray(summary.quick_wins) && summary.quick_wins.length > 0) {
+      lines.push('**Quick Wins**')
+      for (const w of summary.quick_wins) lines.push(`- ${w}`)
+      lines.push('')
+    }
+
+    lines.push('---')
+    lines.push('')
+  }
 
   for (const agent of AGENTS) {
     const state = agentStates[agent.key]
@@ -129,6 +173,92 @@ function generateMarkdownReport(
   }
 
   return lines.join('\n')
+}
+
+function ExecutiveSummaryCard({ status, result }: { status: 'running' | 'complete'; result: ExecutiveSummary | null }) {
+  if (status === 'running') {
+    return (
+      <div className="bg-white rounded-lg border border-[#E8E4DC] border-l-[3px] border-l-[#2D4A6E] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 rounded-full border-2 border-[#E8E4DC] border-t-[#2D4A6E] animate-spin flex-shrink-0" />
+          <div>
+            <div className="text-sm font-semibold text-[#1A1918]">Executive Summary</div>
+            <div className="text-xs text-[#6B6560] mt-0.5">Synthesizing findings...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result || !result.overall_verdict) {
+    // Parse failed — show a minimal fallback so the failure is visible
+    return (
+      <div className="bg-white rounded-lg border border-[#E8E4DC] px-5 py-4">
+        <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-1">Executive Summary</div>
+        <div className="text-xs text-[#9C9690]">Summary unavailable for this audit.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-[#E8E4DC] border-l-[3px] border-l-[#2D4A6E] overflow-hidden">
+      <div className="px-5 pt-4 pb-3 border-b border-[#F0EDE8]">
+        <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Executive Summary</div>
+        <p className="text-sm text-[#1A1918] leading-relaxed">{result.overall_verdict}</p>
+      </div>
+
+      {Array.isArray(result.top_priorities) && result.top_priorities.length > 0 && (
+        <div className="px-5 py-4 border-b border-[#F0EDE8]">
+          <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-3">Top Priorities</div>
+          <div className="space-y-3">
+            {result.top_priorities.map((p) => (
+              <div key={p.rank} className="flex gap-3">
+                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#2D4A6E] text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                  {p.rank}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-[#1A1918]">
+                    {p.finding}
+                    <span className="font-normal text-[#9C9690] ml-1.5">{p.area}</span>
+                  </div>
+                  <div className="text-xs text-[#6B6560] mt-0.5">{p.why_it_matters}</div>
+                  <div className="text-xs text-[#2D4A6E] font-medium mt-1">{p.action}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="px-5 py-4 grid grid-cols-2 gap-4">
+        {result.biggest_strength && (
+          <div>
+            <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Biggest Strength</div>
+            <div className="flex gap-2 items-start">
+              <svg className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-xs text-[#1A1918]">{result.biggest_strength}</span>
+            </div>
+          </div>
+        )}
+
+        {Array.isArray(result.quick_wins) && result.quick_wins.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2">Quick Wins</div>
+            <ul className="space-y-1.5">
+              {result.quick_wins.map((w, i) => (
+                <li key={i} className="text-xs text-[#1A1918] flex gap-2 items-start">
+                  <span className="text-[#2D4A6E] flex-shrink-0 font-semibold leading-none mt-0.5 select-none">+</span>
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
@@ -415,7 +545,7 @@ function DataInputsPanel({ metadata }: { metadata: PageMetadata }) {
   )
 }
 
-const RUN_LIMIT = 5
+const RUN_LIMIT = 3
 
 export default function Home() {
   const [url, setUrl] = useState('')
@@ -434,6 +564,8 @@ export default function Home() {
   const [inviteError, setInviteError] = useState('')
   const [auditCount, setAuditCount] = useState(0)
   const [googleConnected, setGoogleConnected] = useState(false)
+  const [summaryStatus, setSummaryStatus] = useState<'idle' | 'running' | 'complete'>('idle')
+  const [summaryResult, setSummaryResult] = useState<ExecutiveSummary | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -467,6 +599,8 @@ export default function Home() {
     setUsageStats(null)
     setAuditModel('')
     setDurationSec(null)
+    setSummaryStatus('idle')
+    setSummaryResult(null)
     setAgentStates(
       Object.fromEntries(AGENTS.map((a) => [a.key, { status: 'running' as AgentStatus }]))
     )
@@ -512,6 +646,14 @@ export default function Home() {
               }))
               setStatusMsg('Agents running...')
             }
+            if (event.type === 'summary_running') {
+              setSummaryStatus('running')
+              setStatusMsg(event.message)
+            }
+            if (event.type === 'summary_complete') {
+              setSummaryStatus('complete')
+              setSummaryResult(event.result as ExecutiveSummary)
+            }
             if (event.type === 'complete') {
               setCompositeScore(event.compositeScore)
               setUsageStats(event.usage)
@@ -544,7 +686,7 @@ export default function Home() {
   const downloadReport = () => {
     if (compositeScore === null || !usageStats || durationSec === null) return
     const auditUrl = url.startsWith('http') ? url : `https://${url}`
-    const md = generateMarkdownReport(auditUrl, compositeScore, agentStates, usageStats, auditModel, durationSec)
+    const md = generateMarkdownReport(auditUrl, compositeScore, agentStates, usageStats, auditModel, durationSec, summaryResult)
     const blob = new Blob([md], { type: 'text/markdown' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -567,6 +709,8 @@ export default function Home() {
     setName('')
     setCompany('')
     setPageMetadata(null)
+    setSummaryStatus('idle')
+    setSummaryResult(null)
   }
 
   const completedAgents = Object.values(agentStates).filter((a) => a.status === 'complete').length
@@ -577,9 +721,9 @@ export default function Home() {
       <header className="bg-white border-b border-[#E8E4DC] px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence</h1>
+            <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence Engines</h1>
             {phase === 'idle'
-              ? <p className="text-[#6B6560] text-xs mt-0.5">Five-dimension website analysis</p>
+              ? <p className="text-[#6B6560] text-xs mt-0.5">Digital Audits at Digital Speeds</p>
               : <p className="text-[#3D3936] text-xs mt-0.5 font-medium">{url.startsWith('http') ? url : `https://${url}`}</p>
             }
           </div>
@@ -619,10 +763,10 @@ export default function Home() {
           <div className="text-center space-y-10">
             <div className="space-y-4">
               <h2 className="font-display text-[#1A1918]" style={{ fontSize: 'clamp(2.4rem, 4.5vw, 3.8rem)', lineHeight: 1.1 }}>
-                Full Marketing Review
+                Digital Marketing Audit
               </h2>
               <p className="text-[#6B6560] text-lg max-w-xl mx-auto leading-relaxed">
-                Enter any website. Five specialist analyses — content, conversion, SEO, competitive positioning, and brand strategy — delivered simultaneously.
+                Enter any website. Five dimension analysis — content, conversion, SEO, positioning, and brand strategy.
               </p>
             </div>
 
@@ -761,6 +905,11 @@ export default function Home() {
 
             {/* Data inputs */}
             {pageMetadata && <DataInputsPanel metadata={pageMetadata} />}
+
+            {/* Executive summary */}
+            {summaryStatus !== 'idle' && (
+              <ExecutiveSummaryCard status={summaryStatus} result={summaryResult} />
+            )}
 
             {/* Agent cards */}
             <div className="space-y-2">

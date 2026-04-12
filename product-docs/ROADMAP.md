@@ -70,6 +70,14 @@
 
 ### Analysis Quality
 
+- [x] **Connected data enrichment** — GA4 + GSC depth pass
+  Wire up the full set of freely available metrics from both APIs: GA4 conversions by channel, device breakdown, per-page engagement quality, avg engagement time, top events. GSC index coverage (already stubbed), query trend vs. prior 30 days. No new OAuth scopes required. Prerequisite for meaningful conversion agent scoring and executive summary synthesis.
+  _Status: Shipped — `lib/gsc-ga4.ts` interfaces, fetch functions, and formatters updated; conversion agent prompt updated to reference GA4 conversion + events data_
+
+- [x] **Audit quality calibration** — scoring, benchmarks, and executive summary
+  Fix session-weighted bounce rate calculation (bug). Compute agent scores from dimension averages rather than LLM-generated field. Add benchmark context to agent rubrics. Adjust score label thresholds (65 = "Average", not "Good"). Add sixth LLM call post-completion to synthesize a cross-cutting executive summary with ranked top priorities — rendered as a summary card above agent cards.
+  _Status: Shipped — all items complete including executive summary call + UI card and full agent prompt rewrite per Senior Analyst Briefs_
+
 - [ ] **Multi-page crawl**
   Currently fetches homepage only. Parse nav links from homepage HTML, identify up to 3–4 interior pages by URL pattern (about, services, pricing, contact), fetch at reduced truncation (~3–4k chars each). Route different page combinations to different agents — not every agent needs every page. Watch token costs: each additional page amplifies across all 5 parallel calls.
   _Effort: M | Impact: H_

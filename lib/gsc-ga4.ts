@@ -4,21 +4,29 @@ import type { analyticsadmin_v1alpha } from 'googleapis'
 export interface GscData {
   topQueries: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number }>
   topPages: Array<{ page: string; clicks: number }>
-  indexSummary: { indexed: number; notIndexed: number; errors: number } | null
+  indexSummary: { indexed: number; notIndexed: number; errors: number; warnings: number } | null
+  clickTrend: { recent30: number; prior30: number; delta: number } | null
+  impressionTrend: { recent30: number; prior30: number; delta: number } | null
 }
 
 export interface Ga4Data {
   sessionsByChannel: Array<{ channel: string; sessions: number }>
-  topPages: Array<{ page: string; sessions: number }>
+  topPages: Array<{ page: string; sessions: number; bounceRate: number; avgSessionDuration: number }> | null
   engagementRate: number | null
   bounceRate: number | null
   newVsReturning: { new: number; returning: number } | null
+  conversionsByChannel: Array<{ channel: string; conversions: number; sessions: number; conversionRate: number }> | null
+  sessionsByDevice: Array<{ device: string; sessions: number; engagementRate: number }> | null
+  avgEngagementTime: number | null
+  topEvents: Array<{ event: string; count: number }> | null
 }
 
 export interface ConnectedData {
   gsc: GscData | null
   ga4: Ga4Data | null
 }
+
+const NOISY_EVENTS = new Set(['session_start', 'first_visit', 'page_view'])
 
 function makeOAuth2Client() {
   return new google.auth.OAuth2(
@@ -60,10 +68,8 @@ export async function discoverGa4PropertyId(accessToken: string, refreshToken: s
     for (const account of summaries) {
       for (const prop of (account.propertySummaries ?? []) as analyticsadmin_v1alpha.Schema$GoogleAnalyticsAdminV1alphaPropertySummary[]) {
         const propName = prop.property ?? ''
-        // Check display name or data streams for domain match
         const displayName = (prop.displayName ?? '').toLowerCase()
         if (displayName.includes(cleanDomain) || cleanDomain.includes(displayName)) {
-          // property name is like "properties/123456" — extract the ID
           const id = propName.replace('properties/', '')
           if (id) return id
         }
@@ -85,23 +91,50 @@ export async function fetchGscData(accessToken: string, refreshToken: string, si
     oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken })
 
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client })
-    const endDate = new Date()
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - 90)
-    const dateRange = {
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
+
+    const now = new Date()
+
+    const ninetyDaysAgo = new Date(now)
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+
+    const recent30End = now.toISOString().split('T')[0]
+    const recent30Start = new Date(now)
+    recent30Start.setDate(recent30Start.getDate() - 30)
+
+    const prior30End = new Date(now)
+    prior30End.setDate(prior30End.getDate() - 31)
+    const prior30Start = new Date(now)
+    prior30Start.setDate(prior30Start.getDate() - 61)
+
+    const mainDateRange = {
+      startDate: ninetyDaysAgo.toISOString().split('T')[0],
+      endDate: now.toISOString().split('T')[0],
     }
 
-    const [queriesRes, pagesRes] = await Promise.allSettled([
+    const [queriesRes, pagesRes, recentTrendRes, priorTrendRes, sitemapsRes] = await Promise.allSettled([
       webmasters.searchanalytics.query({
         siteUrl,
-        requestBody: { ...dateRange, dimensions: ['query'], rowLimit: 50 },
+        requestBody: { ...mainDateRange, dimensions: ['query'], rowLimit: 50 },
       }),
       webmasters.searchanalytics.query({
         siteUrl,
-        requestBody: { ...dateRange, dimensions: ['page'], rowLimit: 20 },
+        requestBody: { ...mainDateRange, dimensions: ['page'], rowLimit: 20 },
       }),
+      webmasters.searchanalytics.query({
+        siteUrl,
+        requestBody: {
+          startDate: recent30Start.toISOString().split('T')[0],
+          endDate: recent30End,
+        },
+      }),
+      webmasters.searchanalytics.query({
+        siteUrl,
+        requestBody: {
+          startDate: prior30Start.toISOString().split('T')[0],
+          endDate: prior30End.toISOString().split('T')[0],
+        },
+      }),
+      webmasters.sitemaps.list({ siteUrl }),
     ])
 
     const topQueries = queriesRes.status === 'fulfilled'
@@ -121,7 +154,54 @@ export async function fetchGscData(accessToken: string, refreshToken: string, si
         }))
       : []
 
-    return { topQueries, topPages, indexSummary: null }
+    // Index coverage from sitemaps
+    let indexSummary: GscData['indexSummary'] = null
+    if (sitemapsRes.status === 'fulfilled') {
+      const sitemaps = sitemapsRes.value.data.sitemap ?? []
+      let totalIndexed = 0
+      let totalSubmitted = 0
+      for (const sitemap of sitemaps) {
+        for (const content of (sitemap.contents ?? [])) {
+          totalSubmitted += parseInt((content.submitted as string | undefined) ?? '0', 10)
+          totalIndexed += parseInt((content.indexed as string | undefined) ?? '0', 10)
+        }
+      }
+      if (totalSubmitted > 0) {
+        indexSummary = {
+          indexed: totalIndexed,
+          notIndexed: Math.max(0, totalSubmitted - totalIndexed),
+          errors: 0,
+          warnings: 0,
+        }
+      }
+    }
+
+    // Click and impression trend
+    let clickTrend: GscData['clickTrend'] = null
+    let impressionTrend: GscData['impressionTrend'] = null
+
+    if (recentTrendRes.status === 'fulfilled' && priorTrendRes.status === 'fulfilled') {
+      const recentRows = recentTrendRes.value.data.rows ?? []
+      const priorRows = priorTrendRes.value.data.rows ?? []
+
+      const recentClicks = recentRows.reduce((sum, r) => sum + (r.clicks ?? 0), 0)
+      const priorClicks = priorRows.reduce((sum, r) => sum + (r.clicks ?? 0), 0)
+      const recentImpressions = recentRows.reduce((sum, r) => sum + (r.impressions ?? 0), 0)
+      const priorImpressions = priorRows.reduce((sum, r) => sum + (r.impressions ?? 0), 0)
+
+      clickTrend = {
+        recent30: Math.round(recentClicks),
+        prior30: Math.round(priorClicks),
+        delta: priorClicks > 0 ? Math.round(((recentClicks - priorClicks) / priorClicks) * 1000) / 10 : 0,
+      }
+      impressionTrend = {
+        recent30: Math.round(recentImpressions),
+        prior30: Math.round(priorImpressions),
+        delta: priorImpressions > 0 ? Math.round(((recentImpressions - priorImpressions) / priorImpressions) * 1000) / 10 : 0,
+      }
+    }
+
+    return { topQueries, topPages, indexSummary, clickTrend, impressionTrend }
   } catch {
     return null
   }
@@ -136,7 +216,8 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
     const endDate = 'today'
     const startDate = '90daysAgo'
 
-    const [channelRes, pagesRes, newReturnRes] = await Promise.allSettled([
+    const [channelRes, pagesRes, newReturnRes, conversionsByChannelRes, deviceRes, engagementTimeRes, eventsRes] = await Promise.allSettled([
+      // Sessions by channel (existing)
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
@@ -146,22 +227,63 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
           orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
         },
       }),
+      // Top landing pages with engagement quality (replaces simple pagePath report)
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
           dateRanges: [{ startDate, endDate }],
-          dimensions: [{ name: 'pagePath' }],
-          metrics: [{ name: 'sessions' }],
+          dimensions: [{ name: 'landingPage' }],
+          metrics: [{ name: 'sessions' }, { name: 'bounceRate' }, { name: 'averageSessionDuration' }],
           orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
           limit: '10',
         },
       }),
+      // New vs returning (existing)
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
         requestBody: {
           dateRanges: [{ startDate, endDate }],
           dimensions: [{ name: 'newVsReturning' }],
           metrics: [{ name: 'sessions' }, { name: 'engagementRate' }, { name: 'bounceRate' }],
+        },
+      }),
+      // Conversions by channel
+      analyticsData.properties.runReport({
+        property: `properties/${propertyId}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          dimensions: [{ name: 'sessionDefaultChannelGrouping' }],
+          metrics: [{ name: 'conversions' }, { name: 'sessions' }],
+          orderBys: [{ metric: { metricName: 'conversions' }, desc: true }],
+          limit: '10',
+        },
+      }),
+      // Device category breakdown
+      analyticsData.properties.runReport({
+        property: `properties/${propertyId}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          dimensions: [{ name: 'deviceCategory' }],
+          metrics: [{ name: 'sessions' }, { name: 'engagementRate' }],
+        },
+      }),
+      // Site-wide avg engagement time
+      analyticsData.properties.runReport({
+        property: `properties/${propertyId}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          metrics: [{ name: 'averageSessionDuration' }, { name: 'userEngagementDuration' }],
+        },
+      }),
+      // Top events
+      analyticsData.properties.runReport({
+        property: `properties/${propertyId}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          dimensions: [{ name: 'eventName' }],
+          metrics: [{ name: 'eventCount' }],
+          orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+          limit: '15',
         },
       }),
     ])
@@ -177,8 +299,10 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
       ? (pagesRes.value.data.rows ?? []).map((r) => ({
           page: r.dimensionValues?.[0]?.value ?? '',
           sessions: parseInt(r.metricValues?.[0]?.value ?? '0', 10),
+          bounceRate: Math.round(parseFloat(r.metricValues?.[1]?.value ?? '0') * 1000) / 10,
+          avgSessionDuration: Math.round(parseFloat(r.metricValues?.[2]?.value ?? '0')),
         }))
-      : []
+      : null
 
     let engagementRate: number | null = null
     let bounceRate: number | null = null
@@ -190,7 +314,7 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
       let returningSessions = 0
       let totalEngagement = 0
       let totalBounce = 0
-      let count = 0
+      let totalSessions = 0
 
       for (const row of rows) {
         const dim = row.dimensionValues?.[0]?.value ?? ''
@@ -199,28 +323,98 @@ export async function fetchGa4Data(accessToken: string, refreshToken: string, pr
         const bounce = parseFloat(row.metricValues?.[2]?.value ?? '0')
         if (dim === 'new') newSessions = sessions
         if (dim === 'returning') returningSessions = sessions
-        totalEngagement += eng
-        totalBounce += bounce
-        count++
+        // Weight by session count so a 900-new / 100-returning split isn't averaged 50/50
+        totalEngagement += eng * sessions
+        totalBounce += bounce * sessions
+        totalSessions += sessions
       }
 
-      if (count > 0) {
-        engagementRate = Math.round((totalEngagement / count) * 1000) / 10
-        bounceRate = Math.round((totalBounce / count) * 1000) / 10
+      if (totalSessions > 0) {
+        engagementRate = Math.round((totalEngagement / totalSessions) * 1000) / 10
+        bounceRate = Math.round((totalBounce / totalSessions) * 1000) / 10
       }
       if (newSessions + returningSessions > 0) {
         newVsReturning = { new: newSessions, returning: returningSessions }
       }
     }
 
-    return { sessionsByChannel, topPages, engagementRate, bounceRate, newVsReturning }
+    const conversionsByChannel: Ga4Data['conversionsByChannel'] = conversionsByChannelRes.status === 'fulfilled'
+      ? (conversionsByChannelRes.value.data.rows ?? [])
+          .map((r) => {
+            const conversions = parseFloat(r.metricValues?.[0]?.value ?? '0')
+            const sessions = parseInt(r.metricValues?.[1]?.value ?? '0', 10)
+            return {
+              channel: r.dimensionValues?.[0]?.value ?? 'Unknown',
+              conversions: Math.round(conversions),
+              sessions,
+              conversionRate: sessions > 0 ? Math.round((conversions / sessions) * 10000) / 100 : 0,
+            }
+          })
+          .filter((r) => r.conversions > 0)
+      : null
+
+    const sessionsByDevice: Ga4Data['sessionsByDevice'] = deviceRes.status === 'fulfilled'
+      ? (deviceRes.value.data.rows ?? []).map((r) => ({
+          device: r.dimensionValues?.[0]?.value ?? 'Unknown',
+          sessions: parseInt(r.metricValues?.[0]?.value ?? '0', 10),
+          engagementRate: Math.round(parseFloat(r.metricValues?.[1]?.value ?? '0') * 1000) / 10,
+        }))
+      : null
+
+    let avgEngagementTime: number | null = null
+    if (engagementTimeRes.status === 'fulfilled') {
+      const rows = engagementTimeRes.value.data.rows ?? []
+      const val = rows[0]?.metricValues?.[0]?.value
+      if (val != null) avgEngagementTime = Math.round(parseFloat(val))
+    }
+
+    const topEvents: Ga4Data['topEvents'] = eventsRes.status === 'fulfilled'
+      ? (eventsRes.value.data.rows ?? [])
+          .map((r) => ({
+            event: r.dimensionValues?.[0]?.value ?? '',
+            count: parseInt(r.metricValues?.[0]?.value ?? '0', 10),
+          }))
+          .filter((e) => !NOISY_EVENTS.has(e.event))
+      : null
+
+    return {
+      sessionsByChannel,
+      topPages,
+      engagementRate,
+      bounceRate,
+      newVsReturning,
+      conversionsByChannel,
+      sessionsByDevice,
+      avgEngagementTime,
+      topEvents,
+    }
   } catch {
     return null
   }
 }
 
+function formatDuration(seconds: number): string {
+  if (seconds >= 60) return `${(seconds / 60).toFixed(1)} min`
+  return `${seconds}s`
+}
+
 export function formatGscContext(gsc: GscData): string {
   const lines = ['## Google Search Console Data (Last 90 Days)']
+
+  if (gsc.indexSummary) {
+    const { indexed, notIndexed } = gsc.indexSummary
+    lines.push(`\n**Index Coverage:** ${indexed.toLocaleString()} pages indexed, ${notIndexed.toLocaleString()} excluded`)
+  }
+
+  if (gsc.clickTrend) {
+    const dir = gsc.clickTrend.delta >= 0 ? '+' : ''
+    lines.push(`**Click Trend (30-day vs. prior 30):** ${dir}${gsc.clickTrend.delta}% (${gsc.clickTrend.recent30.toLocaleString()} clicks vs ${gsc.clickTrend.prior30.toLocaleString()})`)
+  }
+
+  if (gsc.impressionTrend) {
+    const dir = gsc.impressionTrend.delta >= 0 ? '+' : ''
+    lines.push(`**Impression Trend (30-day vs. prior 30):** ${dir}${gsc.impressionTrend.delta}% (${gsc.impressionTrend.recent30.toLocaleString()} vs ${gsc.impressionTrend.prior30.toLocaleString()})`)
+  }
 
   if (gsc.topQueries.length > 0) {
     lines.push('\n### Top Queries by Impressions')
@@ -244,6 +438,28 @@ export function formatGscContext(gsc: GscData): string {
 export function formatGa4Context(ga4: Ga4Data): string {
   const lines = ['## Google Analytics 4 Data (Last 90 Days)']
 
+  if (ga4.avgEngagementTime !== null) {
+    lines.push(`\n**Avg Session Duration (site-wide):** ${formatDuration(ga4.avgEngagementTime)}`)
+  }
+
+  if (ga4.engagementRate !== null) lines.push(`**Engagement Rate:** ${ga4.engagementRate}%`)
+  if (ga4.bounceRate !== null) lines.push(`**Bounce Rate:** ${ga4.bounceRate}%`)
+
+  if (ga4.newVsReturning) {
+    const total = ga4.newVsReturning.new + ga4.newVsReturning.returning
+    const newPct = total > 0 ? Math.round((ga4.newVsReturning.new / total) * 100) : 0
+    lines.push(`**New vs Returning:** ${newPct}% new, ${100 - newPct}% returning`)
+  }
+
+  if (ga4.sessionsByDevice && ga4.sessionsByDevice.length > 0) {
+    lines.push('\n### Sessions by Device')
+    lines.push('| Device | Sessions | Engagement Rate |')
+    lines.push('|---|---|---|')
+    ga4.sessionsByDevice.forEach((d) => {
+      lines.push(`| ${d.device} | ${d.sessions.toLocaleString()} | ${d.engagementRate}% |`)
+    })
+  }
+
   if (ga4.sessionsByChannel.length > 0) {
     lines.push('\n### Sessions by Channel')
     lines.push('| Channel | Sessions |')
@@ -251,19 +467,33 @@ export function formatGa4Context(ga4: Ga4Data): string {
     ga4.sessionsByChannel.forEach((c) => lines.push(`| ${c.channel} | ${c.sessions.toLocaleString()} |`))
   }
 
-  if (ga4.topPages.length > 0) {
-    lines.push('\n### Top Pages by Sessions')
-    lines.push('| Page | Sessions |')
-    lines.push('|---|---|')
-    ga4.topPages.forEach((p) => lines.push(`| ${p.page} | ${p.sessions.toLocaleString()} |`))
+  if (ga4.conversionsByChannel && ga4.conversionsByChannel.length > 0) {
+    lines.push('\n### Conversions by Channel')
+    lines.push('| Channel | Sessions | Conversions | CVR% |')
+    lines.push('|---|---|---|---|')
+    ga4.conversionsByChannel.forEach((c) => {
+      lines.push(`| ${c.channel} | ${c.sessions.toLocaleString()} | ${c.conversions.toLocaleString()} | ${c.conversionRate}% |`)
+    })
+  } else if (ga4.conversionsByChannel !== null) {
+    lines.push('\n**Conversions:** No conversion events recorded — conversion tracking may not be configured.')
   }
 
-  if (ga4.engagementRate !== null) lines.push(`\n**Engagement Rate:** ${ga4.engagementRate}%`)
-  if (ga4.bounceRate !== null) lines.push(`**Bounce Rate:** ${ga4.bounceRate}%`)
-  if (ga4.newVsReturning) {
-    const total = ga4.newVsReturning.new + ga4.newVsReturning.returning
-    const newPct = total > 0 ? Math.round((ga4.newVsReturning.new / total) * 100) : 0
-    lines.push(`**New vs Returning:** ${newPct}% new, ${100 - newPct}% returning`)
+  if (ga4.topPages && ga4.topPages.length > 0) {
+    lines.push('\n### Top Landing Pages')
+    lines.push('| Page | Sessions | Bounce Rate | Avg Duration |')
+    lines.push('|---|---|---|---|')
+    ga4.topPages.forEach((p) => {
+      lines.push(`| ${p.page} | ${p.sessions.toLocaleString()} | ${p.bounceRate}% | ${formatDuration(p.avgSessionDuration)} |`)
+    })
+  }
+
+  if (ga4.topEvents && ga4.topEvents.length > 0) {
+    lines.push('\n### Top Events (custom)')
+    lines.push('| Event | Count |')
+    lines.push('|---|---|')
+    ga4.topEvents.forEach((e) => lines.push(`| ${e.event} | ${e.count.toLocaleString()} |`))
+  } else if (ga4.topEvents !== null) {
+    lines.push('\n**Events:** No custom conversion events detected — analytics tracking may be incomplete.')
   }
 
   return lines.join('\n')

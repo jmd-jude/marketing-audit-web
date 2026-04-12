@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { AGENTS, WEIGHTS, AgentKey } from '@/lib/agents'
+import { AGENTS, WEIGHTS, AgentKey, SUMMARY_SYSTEM_PROMPT } from '@/lib/agents'
 import { jwtVerify } from 'jose'
 
 export const runtime = 'edge'
@@ -305,6 +305,46 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
   }
 }
 
+async function runSummaryAgent(
+  agentResults: AgentRunResult[]
+): Promise<{ result: Record<string, unknown>; usage: { input_tokens: number; output_tokens: number } }> {
+  const agentOutputs = Object.fromEntries(
+    agentResults.map(({ key, result }) => {
+      const agent = AGENTS.find((a) => a.key === key)!
+      return [agent.label, result]
+    })
+  )
+
+  const userMessage = `Here are the five agent analysis outputs for this site. Synthesize them into an executive summary.\n\n${JSON.stringify(agentOutputs, null, 2)}\n\nReturn ONLY the JSON summary object. No prose, no markdown.`
+
+  const message = await client.messages.create({
+    model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
+    max_tokens: 1024,
+    system: SUMMARY_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userMessage }],
+  })
+
+  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  // Extract the outermost JSON object, ignoring any surrounding prose or code fences
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  const cleaned = jsonMatch ? jsonMatch[0] : text.trim()
+
+  let result: Record<string, unknown>
+  try {
+    result = JSON.parse(cleaned)
+  } catch {
+    result = { error: 'Parse error', raw: cleaned.slice(0, 200) }
+  }
+
+  return {
+    result,
+    usage: {
+      input_tokens: message.usage.input_tokens,
+      output_tokens: message.usage.output_tokens,
+    },
+  }
+}
+
 async function notifyDiscordStart(payload: { name: string; company: string; url: string }) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL
   if (!webhookUrl) return
@@ -470,6 +510,13 @@ export async function GET(request: Request) {
 
         try {
           const agentResult = await runAgent(key, targetUrl, pageContent, additionalContext)
+          // Compute score from dimension averages — don't trust the LLM-generated top-level score
+          const dims = agentResult.result.dimensions as Array<{ score: number }> | undefined
+          if (dims?.length) {
+            agentResult.result.score = Math.round(
+              dims.reduce((sum, d) => sum + (d.score ?? 0), 0) / dims.length * 10
+            )
+          }
           send({ type: 'agent_complete', key, result: agentResult.result, usage: agentResult.usage })
           return agentResult
         } catch (err) {
@@ -491,8 +538,19 @@ export async function GET(request: Request) {
         }, 0)
       )
 
-      const totalInputTokens = results.reduce((s, r) => s + r.usage.input_tokens, 0)
-      const totalOutputTokens = results.reduce((s, r) => s + r.usage.output_tokens, 0)
+      // Run executive summary agent after all five complete
+      send({ type: 'summary_running', message: 'Generating executive summary...' })
+      let summaryUsage = { input_tokens: 0, output_tokens: 0 }
+      try {
+        const summary = await runSummaryAgent(results)
+        summaryUsage = summary.usage
+        send({ type: 'summary_complete', result: summary.result, usage: summary.usage })
+      } catch {
+        send({ type: 'summary_complete', result: { error: 'Summary generation failed' }, usage: summaryUsage })
+      }
+
+      const totalInputTokens = results.reduce((s, r) => s + r.usage.input_tokens, 0) + summaryUsage.input_tokens
+      const totalOutputTokens = results.reduce((s, r) => s + r.usage.output_tokens, 0) + summaryUsage.output_tokens
       const durationMs = Date.now() - startTime
       const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
       const scores = Object.fromEntries(results.map(({ key, result }) => [key, ((result.score as number) || 0)]))
