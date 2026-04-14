@@ -808,7 +808,7 @@ export default function Home() {
                 </button>
               </div>
               <p className="text-[#9C9690] text-xs">
-                Takes 30–60 seconds.{auditCount > 0 ? ` ${RUN_LIMIT - auditCount} of ${RUN_LIMIT} complimentary audits remaining.` : ''}
+                {auditCount > 0 ? `${RUN_LIMIT - auditCount} of ${RUN_LIMIT} complimentary audits remaining.` : ''}
               </p>
 
             </div>

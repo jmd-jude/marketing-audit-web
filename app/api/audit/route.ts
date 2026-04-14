@@ -251,6 +251,7 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
     max_tokens: 2048,
+    temperature: 0.2,
     system: agent.systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   })
@@ -294,6 +295,7 @@ async function runSummaryAgent(
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
     max_tokens: 2048,
+    temperature: 0.2,
     system: SUMMARY_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   })
