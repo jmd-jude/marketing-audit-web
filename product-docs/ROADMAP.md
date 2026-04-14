@@ -42,9 +42,9 @@
   Same operator OAuth grant. Unlocks: organic keyword impressions, CTR, average position, index coverage. Passed to technical, strategy, competitive, and content agents.
   _Status: Shipped — `lib/gsc-ga4.ts`, `/api/connected-data`_
 
-- [x] **OAuth connect flow UI**
-  "Connect Google Analytics & Search Console" strip on landing page. Tokens stored in encrypted HttpOnly JWT cookie (24h session). Connect/Disconnect UI with live status indicator.
-  _Status: Shipped — `/api/auth/{connect,callback,status,disconnect}`, connect strip in `app/page.tsx`_
+- [x] **Service account connected tier** *(replaces OAuth)*
+  OAuth flow was removed. A GCP service account authenticates to Google APIs server-side. No user-facing connect step — clients manually add the service account as a Viewer on their GA4 and Search Console properties. Data loads automatically on every subsequent audit of that domain. All OAuth routes return 410 Gone.
+  _Status: Shipped — `/api/connected-data`, `lib/gsc-ga4.ts`_
 
 ---
 
@@ -80,7 +80,7 @@
 
 - [ ] **Multi-page crawl**
   Currently fetches homepage only. Parse nav links from homepage HTML, identify up to 3–4 interior pages by URL pattern (about, services, pricing, contact), fetch at reduced truncation (~3–4k chars each). Route different page combinations to different agents — not every agent needs every page. Watch token costs: each additional page amplifies across all 5 parallel calls.
-  _Effort: M | Impact: H_
+  _Effort: M | Impact: H | Priority: High — biggest qualitative gap in current analysis depth_
 
 ---
 
@@ -92,7 +92,7 @@
 
 - [ ] **Stripe paywall**
   Natural successor to the run limit. Stripe Payment Link (no-code) for an audit pack (e.g. 10 audits / $49). On checkout success, issue a redemption token to localStorage and lift the gate. No backend payment logic required — Stripe hosts the checkout page.
-  _Effort: M | Impact: H (commercial)_
+  _Effort: M | Impact: H (commercial) | Priority: Lower — concierge model first; paywall relevant when moving to self-serve_
 
 ---
 
@@ -103,8 +103,8 @@
   _Effort: S–M | Impact: M_
 
 - [ ] **Side-by-side competitor audit**
-  Run the same audit on a competitor URL and display results in parallel columns. Natural upsell conversation starter.
-  _Effort: M | Impact: H_
+  Run the same audit on a competitor URL and display results in parallel columns. Natural upsell conversation starter — though a motivated user can already do this by running audits separately.
+  _Effort: M | Impact: H | Priority: High — strongest demo moment and easiest pitch closer_
 
 - [x] **Data sources panel in UI**
   Show what's connected vs. available per audit. Visual representation of the tier model — makes the upsell implicit.
@@ -115,5 +115,5 @@
   _Effort: S | Impact: M_
 
 - [ ] **White-label / client branding**
-  Agency name + logo in header, custom color scheme. Required for client-facing delivery.
-  _Effort: M | Impact: H (commercial)_
+  Agency name + logo in header, custom color scheme. Required for client-facing self-serve delivery.
+  _Effort: M | Impact: H (commercial) | Priority: Lower — concierge model means the agency is always present; white-label becomes relevant when handing the tool directly to clients_

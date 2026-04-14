@@ -44,6 +44,24 @@
 
 ---
 
+**Decision:** Service account authentication instead of user-facing OAuth  
+**Why:** OAuth puts friction on the operator — they'd need to connect their Google account and manage session cookies. The service account model moves setup to the client side (one-time Viewer grant) and makes data always-on with no session management. Simpler to operate, no token refresh to worry about, and fits the concierge model where the agency handles setup on behalf of the client.  
+**Tradeoff:** Requires a manual client onboarding step that the agency has to walk through with each client. Doesn't scale to self-serve — every new client domain needs a human to add the service account. Also locks the tool to a single GCP service account identity, which could become a permission management headache at scale.
+
+---
+
+**Decision:** Dual Discord events (start ping + completion embed)  
+**Why:** The start ping gives visibility into audit initiation in real time — useful for catching abandoned audits or long-running ones that might have stalled. The completion embed has the full data payload. Together they let someone watching Discord diagnose whether a problem was at fetch time or agent time.  
+**Tradeoff:** Two pings per audit adds noise at higher volume. The start ping contains minimal data (no scores) so it's only useful for operational monitoring.
+
+---
+
+**Decision:** Server-side audit log (human-readable + JSONL)  
+**Why:** The Discord embed is ephemeral — no way to query historical audits, look for patterns, or review what agents actually output. The log files give a persistent record of every audit: full agent outputs, user messages, GSC/GA4 context, token usage. The JSONL format is specifically designed for future data analysis (scoring calibration, prompt tuning).  
+**Tradeoff:** Logs live on the server filesystem, which means they're lost on Vercel cold starts / redeployments. Fine for local dev and a dedicated server — needs rethinking for high-volume Vercel deployment.
+
+---
+
 **Decision:** Discord webhook for monitoring, not a dashboard  
 **Why:** Low overhead. The agency doesn't need a metrics dashboard right now — Discord gives visibility into usage, token costs, and scores without building instrumentation.  
 **Tradeoff:** Not scalable if usage grows significantly. No historical log or aggregation.

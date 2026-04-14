@@ -60,21 +60,32 @@ export async function discoverGa4PropertyId(domain: string): Promise<string | nu
     const summaries = res.data.accountSummaries ?? []
     const cleanDomain = domain.replace(/^www\./, '').toLowerCase()
 
+    // Collect all accessible property IDs
+    const propertyIds: string[] = []
     for (const account of summaries) {
       for (const prop of (account.propertySummaries ?? []) as analyticsadmin_v1alpha.Schema$GoogleAnalyticsAdminV1alphaPropertySummary[]) {
-        const propName = prop.property ?? ''
-        const displayName = (prop.displayName ?? '').toLowerCase().replace(/^www\./, '')
-        if (displayName.includes(cleanDomain) || cleanDomain.includes(displayName)) {
-          const id = propName.replace('properties/', '')
-          if (id) return id
-        }
+        const id = (prop.property ?? '').replace('properties/', '')
+        if (id) propertyIds.push(id)
       }
     }
 
-    // Fallback: return first available property if only one
-    const firstProp = summaries[0]?.propertySummaries?.[0] as analyticsadmin_v1alpha.Schema$GoogleAnalyticsAdminV1alphaPropertySummary | undefined
-    const firstId = firstProp?.property?.replace('properties/', '')
-    return firstId ?? null
+    // Check each property's data streams for a domain match
+    for (const id of propertyIds) {
+      try {
+        const streamsRes = await admin.properties.dataStreams.list({ parent: `properties/${id}` })
+        const streams = streamsRes.data.dataStreams ?? []
+        for (const stream of streams) {
+          const streamUrl = (stream.webStreamData?.defaultUri ?? '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase()
+          if (streamUrl === cleanDomain) {
+            return id
+          }
+        }
+      } catch {
+        // Skip properties we can't read streams for
+      }
+    }
+
+    return null
   } catch (err) {
     console.error('[gsc-ga4] discoverGa4PropertyId error:', err)
     return null
