@@ -632,6 +632,9 @@ export async function GET(request: Request) {
         model,
       })
 
+      // Close the stream immediately — do not block on post-completion side effects
+      controller.close()
+
       const auditor = company ? `${name} @ ${company}` : name
       writeAuditLog(origin, {
         id: auditId,
@@ -656,10 +659,8 @@ export async function GET(request: Request) {
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
       }).catch(() => { /* non-critical */ })
 
-      await notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+      notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
-
-      controller.close()
     },
   })
 
