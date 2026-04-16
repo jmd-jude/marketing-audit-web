@@ -632,11 +632,11 @@ export async function GET(request: Request) {
         model,
       })
 
-      // Close the stream immediately — do not block on post-completion side effects
-      controller.close()
-
       const auditor = company ? `${name} @ ${company}` : name
-      writeAuditLog(origin, {
+      // Await the log write so the Edge function doesn't terminate before /api/log
+      // completes its Neon INSERT. The browser already has the `complete` event —
+      // the stream physically closing a second later is invisible to the user.
+      await writeAuditLog(origin, {
         id: auditId,
         timestamp: new Date().toISOString(),
         auditor,
@@ -657,10 +657,13 @@ export async function GET(request: Request) {
         })),
         summary: summaryResult,
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
-      }).catch(() => { /* non-critical */ })
+      })
 
+      // Discord is non-critical — fire and forget before closing
       notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
+
+      controller.close()
     },
   })
 

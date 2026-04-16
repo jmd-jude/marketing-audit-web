@@ -941,7 +941,7 @@ export default function Home() {
                 <div className="text-[#6B6560] text-sm mb-3">{statusMsg}</div>
                 {phase === 'running' && (
                   <div className="space-y-1.5">
-                    <div className="text-[#6B6560] text-xs">{completedAgents} of 5 agents complete</div>
+                    <div className="text-[#6B6560] text-xs">{completedAgents} of 5 dimensions complete</div>
                     <div className="bg-[#F0EDE8] rounded-full h-1 w-48">
                       <div
                         className="bg-[#2D4A6E] h-1 rounded-full transition-all duration-700"
