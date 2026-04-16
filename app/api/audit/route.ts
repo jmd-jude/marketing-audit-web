@@ -659,8 +659,7 @@ export async function GET(request: Request) {
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
       })
 
-      // Discord is non-critical — fire and forget before closing
-      notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+      await notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
 
       controller.close()
