@@ -478,6 +478,88 @@ function AgentCard({ agent, state }: { agent: typeof AGENTS[0]; state: AgentStat
   )
 }
 
+function PageUnlockGate({ onUnlock }: { onUnlock: () => void }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState(false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const validCodes = (process.env.NEXT_PUBLIC_UNLOCK_CODES ?? '')
+      .split(',').map((c) => c.trim()).filter(Boolean)
+    if (validCodes.includes(code.trim())) {
+      onUnlock()
+    } else {
+      setError(true)
+      setTimeout(() => setError(false), 2000)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-[#E8E4DC] rounded-xl p-6 text-center space-y-4">
+      <div className="w-10 h-10 rounded-full bg-[#F0EDE8] flex items-center justify-center mx-auto">
+        <svg className="w-5 h-5 text-[#6B6560]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      <div>
+        <div className="text-[#1A1918] font-semibold text-base">Full report is locked</div>
+        <div className="text-sm text-[#6B6560] mt-1">
+          Enter your access code to unlock priority actions, quick wins, and full agent analysis.
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="flex gap-2 max-w-sm mx-auto">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Access code"
+          className={`flex-1 border rounded-lg px-3 py-2 text-sm outline-none transition-colors ${
+            error ? 'border-red-400 bg-red-50' : 'border-[#E8E4DC] focus:border-[#2D4A6E]'
+          }`}
+        />
+        <button
+          type="submit"
+          className="bg-[#2D4A6E] hover:bg-[#1A2E45] text-white text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          Unlock
+        </button>
+      </form>
+      {error && <p className="text-red-600 text-xs">Invalid code — try again.</p>}
+      <p className="text-xs text-[#9C9690]">
+        Don&apos;t have a code?{' '}
+        <a href="mailto:jude.hoffner@gmail.com" className="text-[#2D4A6E] hover:underline">
+          Get in touch to discuss your findings.
+        </a>
+      </p>
+    </div>
+  )
+}
+
+function ShareLink({ auditId }: { auditId: string }) {
+  const [copied, setCopied] = useState(false)
+  const url = `${window.location.origin}/audit/${auditId}`
+
+  const copy = () => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-white border border-[#E8E4DC] rounded-lg px-4 py-2.5 text-sm">
+      <span className="text-[#6B6560] select-none">Shareable link:</span>
+      <span className="font-mono text-[#1A1918] text-xs truncate max-w-[260px]">{url}</span>
+      <button
+        onClick={copy}
+        className="ml-1 text-[#2D4A6E] hover:text-[#1A1918] font-medium text-xs flex-shrink-0 transition-colors"
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+    </div>
+  )
+}
+
 function DataInputsPanel({ metadata }: { metadata: PageMetadata }) {
   const [expanded, setExpanded] = useState(true)
 
@@ -556,6 +638,7 @@ export default function Home() {
   const [statusMsg, setStatusMsg] = useState('')
   const [agentStates, setAgentStates] = useState<AgentResults>({})
   const [compositeScore, setCompositeScore] = useState<number | null>(null)
+  const [auditId, setAuditId] = useState<string | null>(null)
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null)
   const [auditModel, setAuditModel] = useState<string>('')
   const [durationSec, setDurationSec] = useState<number | null>(null)
@@ -566,6 +649,7 @@ export default function Home() {
   const [dataConnected, setDataConnected] = useState(false)
   const [summaryStatus, setSummaryStatus] = useState<'idle' | 'running' | 'complete'>('idle')
   const [summaryResult, setSummaryResult] = useState<ExecutiveSummary | null>(null)
+  const [unlocked, setUnlocked] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -647,6 +731,7 @@ export default function Home() {
             }
             if (event.type === 'complete') {
               setCompositeScore(event.compositeScore)
+              setAuditId(event.auditId ?? null)
               setUsageStats(event.usage)
               setAuditModel(event.model)
               setDurationSec(Math.round(event.durationMs / 100) / 10)
@@ -702,6 +787,8 @@ export default function Home() {
     setPageMetadata(null)
     setSummaryStatus('idle')
     setSummaryResult(null)
+    setUnlocked(false)
+    setAuditId(null)
   }
 
   const completedAgents = Object.values(agentStates).filter((a) => a.status === 'complete').length
@@ -869,24 +956,139 @@ export default function Home() {
             {/* Data inputs */}
             {pageMetadata && <DataInputsPanel metadata={pageMetadata} />}
 
-            {/* Executive summary */}
-            {summaryStatus !== 'idle' && (
-              <ExecutiveSummaryCard status={summaryStatus} result={summaryResult} />
+            {/* While running — show live summary + agent cards in full */}
+            {phase === 'running' && (
+              <>
+                {summaryStatus !== 'idle' && (
+                  <ExecutiveSummaryCard status={summaryStatus} result={summaryResult} />
+                )}
+                <div className="space-y-2">
+                  <div className="text-[#9C9690] text-xs font-semibold uppercase tracking-widest px-1 pt-2">
+                    Analysis Results
+                  </div>
+                  {AGENTS.map((agent) => (
+                    <AgentCard
+                      key={agent.key}
+                      agent={agent}
+                      state={agentStates[agent.key] ?? { status: 'idle' }}
+                    />
+                  ))}
+                </div>
+              </>
             )}
 
-            {/* Agent cards */}
-            <div className="space-y-2">
-              <div className="text-[#9C9690] text-xs font-semibold uppercase tracking-widest px-1 pt-2">
-                Analysis Results
+            {/* Done — teaser until unlocked */}
+            {phase === 'done' && summaryResult && (
+              <div className="space-y-4">
+                {/* Verdict — always visible */}
+                <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-2">Overall Assessment</div>
+                  <p className="text-sm text-[#1A1918] leading-relaxed">{summaryResult.overall_verdict}</p>
+                </div>
+
+                {/* Biggest strength — always visible */}
+                {summaryResult.biggest_strength && (
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-2">Biggest Strength</div>
+                    <p className="text-sm text-[#1A1918] leading-relaxed">{summaryResult.biggest_strength}</p>
+                  </div>
+                )}
+
+                {/* Top priority #1 — finding only, no action */}
+                {summaryResult.top_priorities?.[0] && (
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-3">Top Priority</div>
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F0EDE8] flex items-center justify-center text-xs font-bold text-[#6B6560]">1</div>
+                      <div>
+                        <div className="text-xs font-semibold text-[#2D4A6E] uppercase tracking-wide mb-1">{summaryResult.top_priorities[0].area}</div>
+                        <p className="text-sm text-[#1A1918] leading-relaxed">{summaryResult.top_priorities[0].finding}</p>
+                        {summaryResult.top_priorities[0].why_it_matters && (
+                          <p className="text-xs text-[#6B6560] mt-1 leading-relaxed">{summaryResult.top_priorities[0].why_it_matters}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Locked content or full reveal */}
+                {!unlocked ? (
+                  <>
+                    {[
+                      { label: `${(summaryResult.top_priorities?.length ?? 1) - 1} more priority actions`, description: 'Ranked by business impact, each with a specific next step' },
+                      { label: 'Quick wins', description: 'Changes actionable this week with clear expected impact' },
+                      { label: 'Full agent analysis', description: 'Content, conversion, SEO, strategy, and competitive deep-dives' },
+                    ].map(({ label, description }) => (
+                      <div key={label} className="border border-dashed border-[#D8D4CE] rounded-lg px-5 py-4 flex items-center gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#F0EDE8] flex items-center justify-center">
+                          <svg className="w-4 h-4 text-[#9C9690]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-[#1A1918]">{label}</div>
+                          <div className="text-xs text-[#9C9690] mt-0.5">{description}</div>
+                        </div>
+                      </div>
+                    ))}
+                    <PageUnlockGate onUnlock={() => setUnlocked(true)} />
+                  </>
+                ) : (
+                  <>
+                    {/* Remaining priorities */}
+                    {summaryResult.top_priorities?.slice(1).length > 0 && (
+                      <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-3">Priority Actions</div>
+                        <div className="space-y-4">
+                          {summaryResult.top_priorities.slice(1).map((p) => (
+                            <div key={p.rank} className="flex gap-3">
+                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F0EDE8] flex items-center justify-center text-xs font-bold text-[#6B6560]">{p.rank}</div>
+                              <div>
+                                <div className="text-xs font-semibold text-[#2D4A6E] uppercase tracking-wide mb-1">{p.area}</div>
+                                <p className="text-sm text-[#1A1918] leading-relaxed">{p.finding}</p>
+                                {p.why_it_matters && <p className="text-xs text-[#6B6560] mt-1 leading-relaxed">{p.why_it_matters}</p>}
+                                {p.action && (
+                                  <div className="mt-2 bg-[#F4F2EF] rounded-lg px-3 py-2 text-xs text-[#1A1918] leading-relaxed">
+                                    <span className="font-semibold">Action: </span>{p.action}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick wins */}
+                    {summaryResult.quick_wins?.length > 0 && (
+                      <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-3">Quick Wins</div>
+                        <ul className="space-y-2">
+                          {summaryResult.quick_wins.map((w, i) => (
+                            <li key={i} className="flex gap-2 text-sm text-[#1A1918] leading-relaxed">
+                              <span className="text-emerald-600 font-bold flex-shrink-0">→</span>
+                              {w}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Full agent cards */}
+                    <div className="space-y-2">
+                      <div className="text-[#9C9690] text-xs font-semibold uppercase tracking-widest px-1 pt-2">Agent Analysis</div>
+                      {AGENTS.map((agent) => (
+                        <AgentCard
+                          key={agent.key}
+                          agent={agent}
+                          state={agentStates[agent.key] ?? { status: 'idle' }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-              {AGENTS.map((agent) => (
-                <AgentCard
-                  key={agent.key}
-                  agent={agent}
-                  state={agentStates[agent.key] ?? { status: 'idle' }}
-                />
-              ))}
-            </div>
+            )}
 
             {(phase === 'running' || phase === 'done') && (
               <DataSourcesPanel
@@ -898,19 +1100,16 @@ export default function Home() {
             )}
 
             {phase === 'done' && (
-              <div className="flex justify-center gap-3 pt-2">
-                <button
-                  onClick={downloadReport}
-                  className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
-                >
-                  Download Report
-                </button>
-                <button
-                  onClick={reset}
-                  className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
-                >
-                  Audit Another Site
-                </button>
+              <div className="flex flex-col items-center gap-3 pt-2">
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={reset}
+                    className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
+                  >
+                    Audit Another Site
+                  </button>
+                </div>
+                {auditId && <ShareLink auditId={auditId} />}
               </div>
             )}
           </div>

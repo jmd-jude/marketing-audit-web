@@ -4,8 +4,6 @@
 
 ## Background
 
-The Connected tier (GA4 + GSC via OAuth) is live. The OAuth flow, session handling, `/api/connected-data` route, `lib/gsc-ga4.ts` fetch and format functions, and agent context injection pipeline are all shipped.
-
 The current implementation pulls a narrow slice of what both APIs freely expose. This produces an audit that can feel thin or speculative in areas — particularly conversion optimization — because the underlying data to support evidence-based findings isn't being requested. This doc specifies what to add, where it goes in the code, and which agents receive it.
 
 No new API scopes are required. Everything here is available within `analytics.readonly` and `webmasters.readonly`, which users have already granted.

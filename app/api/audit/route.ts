@@ -327,6 +327,7 @@ async function runSummaryAgent(
 }
 
 async function writeAuditLog(origin: string, payload: {
+  id: string
   timestamp: string
   auditor: string
   url: string
@@ -613,9 +614,11 @@ export async function GET(request: Request) {
       const durationMs = Date.now() - startTime
       const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
       const scores = Object.fromEntries(results.map(({ key, result }) => [key, ((result.score as number) || 0)]))
+      const auditId = crypto.randomUUID()
 
       send({
         type: 'complete',
+        auditId,
         compositeScore,
         scores,
         pageSpeed,
@@ -631,6 +634,7 @@ export async function GET(request: Request) {
 
       const auditor = company ? `${name} @ ${company}` : name
       writeAuditLog(origin, {
+        id: auditId,
         timestamp: new Date().toISOString(),
         auditor,
         url: targetUrl,

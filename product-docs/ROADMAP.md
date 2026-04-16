@@ -82,13 +82,21 @@
   Currently fetches homepage only. Parse nav links from homepage HTML, identify up to 3–4 interior pages by URL pattern (about, services, pricing, contact), fetch at reduced truncation (~3–4k chars each). Route different page combinations to different agents — not every agent needs every page. Watch token costs: each additional page amplifies across all 5 parallel calls.
   _Effort: M | Impact: H | Priority: High — biggest qualitative gap in current analysis depth_
 
+- [ ] **Dynamic pre-audit questionnaire** — AI-generated business context step
+  Before launching the 5-agent audit, run a lightweight "discovery" pass on the homepage: infer business model, identify ambiguities the agents would otherwise have to guess at (pricing model, sales motion, target buyer, conversion goal), and generate 3–5 targeted questions specific to what the page actually shows. Surface those questions in the UI as an editable form — user confirms or edits, then hits Run. Answers get injected as `additionalContext` into all 5 agents. This replaces inference with knowledge for the highest-leverage inputs. A static fallback form (generic business context questions) is a simpler interim option if the AI-generated approach is deferred.
+  
+  The questionnaire becomes meaningfully sharper when multi-page crawl is available — the discovery agent has seen /about, /pricing, /services rather than just the homepage, so its hypotheses are better grounded. Sequencing: multi-page crawl first, then this.
+  
+  Token cost note: one additional lightweight LLM call before the main audit run. Negligible relative to the 5-agent payload, but adds a round-trip of latency (mitigated by the fact that user is filling out the form during that time).
+  _Effort: M | Impact: H | Priority: High — directly addresses the core "no business context" gap; makes audit findings more credible and specific_
+
 ---
 
 ### Access & Monetization
 
 - [x] **Invite code + run limit**
   Invite code field on landing page — valid codes in env var, checked server-side. Code stored in localStorage so re-entry isn't required. Each audit increments a localStorage counter; at N runs (e.g. 5) show a "complimentary audits used" message with a contact/upgrade CTA. Counter is bypassable but sufficient for demo-stage metering — anyone motivated enough to clear localStorage is a warm lead.
-  _Status: Shipped — `INVITE_CODES` env var (comma-separated), `RUN_LIMIT = 5` in `page.tsx`, gate screen with contact CTA_
+  _Status: Shipped — `INVITE_CODES` env var (comma-separated), `RUN_LIMIT = 3` in `page.tsx`, gate screen with contact CTA_
 
 - [ ] **Stripe paywall**
   Natural successor to the run limit. Stripe Payment Link (no-code) for an audit pack (e.g. 10 audits / $49). On checkout success, issue a redemption token to localStorage and lift the gate. No backend payment logic required — Stripe hosts the checkout page.
