@@ -46,6 +46,153 @@ interface PageMetadata {
   metaRobots: string | null
 }
 
+interface PageAnalyzed {
+  url: string
+  status: 'fetched' | 'timeout' | 'error' | 'skipped'
+  chars: number
+  agents: AgentKey[]
+}
+
+interface InteriorPageContent {
+  url: string
+  path: string
+  content: string
+  agents: AgentKey[]
+}
+
+const PAGE_CONFIG: Array<{
+  patterns: string[]
+  score: number
+  agents: AgentKey[]
+}> = [
+  {
+    patterns: ['/pricing', '/plans', '/packages', '/rates', '/investment'],
+    score: 10,
+    agents: ['conversion', 'competitive'],
+  },
+  {
+    patterns: ['/about', '/about-us', '/our-story', '/team', '/who-we-are'],
+    score: 9,
+    agents: ['strategy', 'content'],
+  },
+  {
+    patterns: ['/services', '/solutions', '/products', '/offerings', '/what-we-do', '/work'],
+    score: 9,
+    agents: ['competitive', 'content', 'strategy'],
+  },
+  {
+    patterns: ['/contact', '/demo', '/book', '/get-started', '/schedule', '/consultation'],
+    score: 7,
+    agents: ['conversion'],
+  },
+  {
+    patterns: ['/how-it-works', '/process', '/approach', '/methodology'],
+    score: 6,
+    agents: ['strategy', 'content'],
+  },
+  {
+    patterns: ['/case-studies', '/portfolio', '/results', '/clients', '/success'],
+    score: 5,
+    agents: ['competitive', 'strategy'],
+  },
+]
+
+const SKIP_PATTERNS = [
+  '/blog', '/news', '/press', '/privacy', '/terms', '/legal',
+  '/login', '/app', '/dashboard', '/wp-admin', '/cdn', '/assets',
+]
+
+function scoreLink(path: string): { score: number; agents: AgentKey[] } | null {
+  const lpath = path.toLowerCase()
+
+  // Skip list — never fetch
+  if (SKIP_PATTERNS.some((p) => lpath.includes(p))) return null
+  // Skip date patterns like /2024/ or /2025/
+  if (/\/20\d\d\//.test(lpath)) return null
+
+  for (const config of PAGE_CONFIG) {
+    if (config.patterns.some((p) => lpath.includes(p))) {
+      return { score: config.score, agents: config.agents }
+    }
+  }
+
+  // No match — strict mode, skip unrecognized URLs
+  return null
+}
+
+function extractLinks(html: string, baseUrl: string): string[] {
+  const base = new URL(baseUrl)
+  const seen = new Set<string>()
+  const links: string[] = []
+
+  const hrefRegex = /href=["']([^"'#?][^"']*?)["']/gi
+  let match: RegExpExecArray | null
+  while ((match = hrefRegex.exec(html)) !== null) {
+    const raw = match[1].trim()
+    if (!raw) continue
+
+    let resolved: URL
+    try {
+      resolved = new URL(raw, base)
+    } catch {
+      continue
+    }
+
+    // Same origin only
+    if (resolved.origin !== base.origin) continue
+
+    // Path-only, no fragments, no file extensions
+    const path = resolved.pathname
+    if (path === '/' || path === base.pathname) continue
+    if (/\.(pdf|zip|png|jpg|jpeg|gif|svg|webp|ico|css|js|xml|txt)$/i.test(path)) continue
+
+    const normalized = path.replace(/\/$/, '') || '/'
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    links.push(resolved.origin + normalized)
+  }
+
+  return links
+}
+
+function selectInteriorPages(links: string[], maxPages = 3): Array<{ url: string; path: string; score: number; agents: AgentKey[] }> {
+  const scored: Array<{ url: string; path: string; score: number; agents: AgentKey[] }> = []
+
+  for (const url of links) {
+    const path = new URL(url).pathname
+    const result = scoreLink(path)
+    if (!result || result.score === 0) continue
+    scored.push({ url, path, score: result.score, agents: result.agents })
+  }
+
+  // Sort by score desc (ties preserved in order of appearance)
+  scored.sort((a, b) => b.score - a.score)
+
+  return scored.slice(0, maxPages)
+}
+
+async function fetchInteriorPage(url: string): Promise<{ content: string; chars: number; status: 'fetched' | 'timeout' | 'error' }> {
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MarketingAuditBot/1.0)' },
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!response.ok) {
+      return { content: '', chars: 0, status: 'error' }
+    }
+    const html = await response.text()
+    const stripped = html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
+    const truncated = stripped.slice(0, 3000)
+    return { content: truncated, chars: truncated.length, status: 'fetched' }
+  } catch (err) {
+    const isTimeout = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+    return { content: '', chars: 0, status: isTimeout ? 'timeout' : 'error' }
+  }
+}
+
 function extractPageMetadata(html: string): PageMetadata {
   const title = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? null
 
@@ -105,7 +252,7 @@ async function fetchRobotsAndSitemap(url: string): Promise<string> {
   }
 }
 
-async function fetchPageContent(url: string): Promise<{ content: string; metadata: PageMetadata }> {
+async function fetchPageContent(url: string): Promise<{ content: string; metadata: PageMetadata; links: string[] }> {
   const emptyMetadata: PageMetadata = {
     title: null, metaDescription: null, canonical: null,
     h1s: [], wordCount: 0, hasStructuredData: false, hasOgTags: false, metaRobots: null,
@@ -117,15 +264,17 @@ async function fetchPageContent(url: string): Promise<{ content: string; metadat
     })
     const html = await response.text()
     const metadata = extractPageMetadata(html)
+    const links = extractLinks(html, url)
     const stripped = html
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
-    return { content: stripped.slice(0, 15000), metadata }
+    return { content: stripped.slice(0, 15000), metadata, links }
   } catch {
     return {
       content: `Unable to fetch page content from ${url}. Analyze based on URL structure and domain name alone.`,
       metadata: emptyMetadata,
+      links: [],
     }
   }
 }
@@ -337,6 +486,7 @@ async function writeAuditLog(origin: string, payload: {
   model: string
   gscContext: string | null
   ga4Context: string | null
+  pagesAnalyzed: Array<{ url: string; status: string; chars: number; agents: AgentKey[] }>
   agents: Array<{
     key: string
     score: number
@@ -523,13 +673,37 @@ export async function GET(request: Request) {
           .then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
           .catch(() => ({ gscContext: null, ga4Context: null })),
       ])
-      const { content: pageContent, metadata: pageMetadata } = pageData
+      const { content: pageContent, metadata: pageMetadata, links: homepageLinks } = pageData
       const { gscContext, ga4Context } = connectedData
       const isConnected = gscContext !== null || ga4Context !== null
+
+      // Select and fetch interior pages (after homepage, before agents launch)
+      const selectedPages = selectInteriorPages(homepageLinks)
+      const interiorResults = await Promise.allSettled(
+        selectedPages.map((p) => fetchInteriorPage(p.url).then((r) => ({ ...p, ...r })))
+      )
+
+      const pagesAnalyzed: Array<{ url: string; status: 'fetched' | 'timeout' | 'error' | 'skipped'; chars: number; agents: AgentKey[] }> = []
+      const fetchedInteriorPages: InteriorPageContent[] = []
+
+      for (let i = 0; i < interiorResults.length; i++) {
+        const sel = selectedPages[i]
+        const res = interiorResults[i]
+        if (res.status === 'fulfilled') {
+          const { path, content, chars, status, agents } = res.value
+          pagesAnalyzed.push({ url: path, status, chars, agents: status === 'fetched' ? agents : [] })
+          if (status === 'fetched') {
+            fetchedInteriorPages.push({ url: sel.url, path, content, agents })
+          }
+        } else {
+          pagesAnalyzed.push({ url: sel.path, status: 'error', chars: 0, agents: [] })
+        }
+      }
 
       // Data pipeline visibility log
       console.log(`\n[audit] ── ${targetUrl} ──────────────────────`)
       console.log(`[audit] HTML: ${pageContent.length} chars | PageSpeed: ${pageSpeed ? `perf=${pageSpeed.scores.performance}` : 'unavailable'} | crawl: ${crawlData ? `${crawlData.length} chars` : 'none'}`)
+      console.log(`[audit] interior pages: ${fetchedInteriorPages.length}/${selectedPages.length} fetched — ${pagesAnalyzed.map((p) => `${p.url}(${p.status})`).join(', ') || 'none'}`)
       if (gscContext) {
         console.log(`[audit] GSC context (${gscContext.length} chars):\n${gscContext.slice(0, 800)}`)
       } else {
@@ -541,12 +715,14 @@ export async function GET(request: Request) {
         console.log('[audit] GA4 context: none')
       }
 
+      const interiorPageCount = fetchedInteriorPages.length
       send({
         type: 'fetched',
-        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}. Launching 5 parallel agents...`,
+        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${interiorPageCount > 0 ? ` + ${interiorPageCount} interior page${interiorPageCount > 1 ? 's' : ''} ✓` : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}. Launching 5 parallel agents...`,
         pageSpeed,
         metadata: pageMetadata,
         connected: isConnected,
+        pagesAnalyzed: pagesAnalyzed.map(({ url, status }) => ({ url, status })),
       })
 
       const agentKeys: AgentKey[] = ['content', 'conversion', 'competitive', 'technical', 'strategy']
@@ -563,6 +739,12 @@ export async function GET(request: Request) {
         }
         if (gscContext && GSC_AGENTS.has(key)) parts.push(gscContext)
         if (ga4Context && GA4_AGENTS.has(key)) parts.push(ga4Context)
+        // Append interior page content for pages routed to this agent
+        for (const page of fetchedInteriorPages) {
+          if (page.agents.includes(key)) {
+            parts.push(`## Interior Page: ${page.path}\n${page.content}`)
+          }
+        }
         const additionalContext = parts.filter(Boolean).join('\n\n') || undefined
 
         try {
@@ -647,6 +829,7 @@ export async function GET(request: Request) {
         model,
         gscContext,
         ga4Context,
+        pagesAnalyzed,
         agents: results.map(({ key, result, userMessage, usage }) => ({
           key,
           score: (result.score as number) || 0,
