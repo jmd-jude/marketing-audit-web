@@ -78,9 +78,9 @@
   Fix session-weighted bounce rate calculation (bug). Compute agent scores from dimension averages rather than LLM-generated field. Add benchmark context to agent rubrics. Adjust score label thresholds (65 = "Average", not "Good"). Add sixth LLM call post-completion to synthesize a cross-cutting executive summary with ranked top priorities — rendered as a summary card above agent cards.
   _Status: Shipped — all items complete including executive summary call + UI card and full agent prompt rewrite per Senior Analyst Briefs_
 
-- [ ] **Multi-page crawl**
-  Currently fetches homepage only. Parse nav links from homepage HTML, identify up to 3–4 interior pages by URL pattern (about, services, pricing, contact), fetch at reduced truncation (~3–4k chars each). Route different page combinations to different agents — not every agent needs every page. Watch token costs: each additional page amplifies across all 5 parallel calls.
-  _Effort: M | Impact: H | Priority: High — biggest qualitative gap in current analysis depth_
+- [x] **Multi-page crawl**
+  Fetches up to 3 interior pages per audit. Links extracted from homepage HTML, scored against `PAGE_CONFIG` patterns (pricing, about, services, contact, process, case-studies), top 3 fetched in parallel with 4s timeout and 3k char truncation. Each page routed to the agents it benefits — technical agent excluded. `pagesAnalyzed` logged to JSONB payload and surfaced in the Data Sources panel.
+  _Status: Shipped — `extractLinks`, `selectInteriorPages`, `fetchInteriorPage` in `app/api/audit/route.ts`_
 
 - [ ] **Dynamic pre-audit questionnaire** — AI-generated business context step
   Before launching the 5-agent audit, run a lightweight "discovery" pass on the homepage: infer business model, identify ambiguities the agents would otherwise have to guess at (pricing model, sales motion, target buyer, conversion goal), and generate 3–5 targeted questions specific to what the page actually shows. Surface those questions in the UI as an editable form — user confirms or edits, then hits Run. Answers get injected as `additionalContext` into all 5 agents. This replaces inference with knowledge for the highest-leverage inputs. A static fallback form (generic business context questions) is a simpler interim option if the AI-generated approach is deferred.
@@ -106,7 +106,7 @@
 
 ### UX / Product
 
-- [ ] **Saved audit history** (localStorage or DB)
+- [x] **Saved audit history** (localStorage or DB)
   Results disappear on refresh currently. localStorage is a quick win; Vercel Postgres/Supabase for multi-session.
   _Effort: S–M | Impact: M_
 
