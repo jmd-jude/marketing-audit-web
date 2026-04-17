@@ -122,6 +122,8 @@ function scoreLink(path: string): { score: number; agents: AgentKey[] } | null {
 
 function extractLinks(html: string, baseUrl: string): string[] {
   const base = new URL(baseUrl)
+  // Normalize: strip www for comparison so www.example.com and example.com are treated as same site
+  const baseHost = base.hostname.replace(/^www\./, '')
   const seen = new Set<string>()
   const links: string[] = []
 
@@ -138,8 +140,8 @@ function extractLinks(html: string, baseUrl: string): string[] {
       continue
     }
 
-    // Same origin only
-    if (resolved.origin !== base.origin) continue
+    // Same site only — normalize www for comparison
+    if (resolved.hostname.replace(/^www\./, '') !== baseHost) continue
 
     // Path-only, no fragments, no file extensions
     const path = resolved.pathname
