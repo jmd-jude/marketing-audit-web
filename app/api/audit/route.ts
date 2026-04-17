@@ -659,25 +659,32 @@ export async function GET(request: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
       }
 
+      const auditId = crypto.randomUUID()
+      const auditor = company ? `${name} @ ${company}` : name
+
       notifyDiscordStart({ name, company, url: targetUrl }).catch(() => { /* non-critical */ })
 
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
-      // Fetch HTML, PageSpeed, crawl data, and GSC/GA4 in parallel.
-      // GSC/GA4 is fetched via /api/connected-data (Node runtime) to avoid Edge/googleapis conflict.
-      // Service account auth is handled server-side — no session needed.
+      // Fetch HTML, PageSpeed, crawl data, GSC/GA4, and DataForSEO competitive data in parallel.
+      // Both /api/connected-data and /api/competitive-data run on Node runtime to avoid Edge constraints.
       const origin = new URL(request.url).origin
-      const [pageData, pageSpeed, crawlData, connectedData] = await Promise.all([
+      const [pageData, pageSpeed, crawlData, connectedData, competitiveData] = await Promise.all([
         fetchPageContent(targetUrl),
         fetchPageSpeed(targetUrl),
         fetchRobotsAndSitemap(targetUrl),
         fetch(`${origin}/api/connected-data?siteUrl=${encodeURIComponent(targetUrl)}`)
           .then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
           .catch(() => ({ gscContext: null, ga4Context: null })),
+        fetch(`${origin}/api/competitive-data?siteUrl=${encodeURIComponent(targetUrl)}`)
+          .then((r) => r.json() as Promise<{ rankContext: string | null; competitorsContext: string | null }>)
+          .catch(() => ({ rankContext: null, competitorsContext: null })),
       ])
       const { content: pageContent, metadata: pageMetadata, links: homepageLinks } = pageData
       const { gscContext, ga4Context } = connectedData
+      const { rankContext, competitorsContext } = competitiveData
       const isConnected = gscContext !== null || ga4Context !== null
+      const isCompetitive = rankContext !== null || competitorsContext !== null
 
       // Select and fetch interior pages (after homepage, before agents launch)
       const selectedPages = selectInteriorPages(homepageLinks)
@@ -720,18 +727,30 @@ export async function GET(request: Request) {
       const interiorPageCount = fetchedInteriorPages.length
       send({
         type: 'fetched',
-        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${interiorPageCount > 0 ? ` + ${interiorPageCount} interior page${interiorPageCount > 1 ? 's' : ''} ✓` : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}. Launching 5 parallel agents...`,
+        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${interiorPageCount > 0 ? ` + ${interiorPageCount} interior page${interiorPageCount > 1 ? 's' : ''} ✓` : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}${isCompetitive ? ' + DataForSEO ✓' : ''}. Launching 5 parallel agents...`,
         pageSpeed,
         metadata: pageMetadata,
         connected: isConnected,
+        competitive: isCompetitive,
         pagesAnalyzed: pagesAnalyzed.map(({ url, status }) => ({ url, status })),
       })
 
+      fetch(`${origin}/api/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'init',
+          data: { id: auditId, timestamp: new Date().toISOString(), url: targetUrl, auditor },
+        }),
+      }).catch(() => {})
+
       const agentKeys: AgentKey[] = ['content', 'conversion', 'competitive', 'technical', 'strategy']
 
-      // Per PRD: which agents get which connected data
+      // Per PRD: which agents get which data sources
       const GSC_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content'])
       const GA4_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content', 'conversion'])
+      const RANK_AGENTS = new Set(['technical', 'strategy'])
+      const COMPETITORS_AGENTS = new Set(['competitive', 'strategy'])
 
       const promises = agentKeys.map(async (key) => {
         const parts: (string | null)[] = []
@@ -741,6 +760,8 @@ export async function GET(request: Request) {
         }
         if (gscContext && GSC_AGENTS.has(key)) parts.push(gscContext)
         if (ga4Context && GA4_AGENTS.has(key)) parts.push(ga4Context)
+        if (rankContext && RANK_AGENTS.has(key)) parts.push(rankContext)
+        if (competitorsContext && COMPETITORS_AGENTS.has(key)) parts.push(competitorsContext)
         // Append interior page content for pages routed to this agent
         for (const page of fetchedInteriorPages) {
           if (page.agents.includes(key)) {
@@ -759,6 +780,14 @@ export async function GET(request: Request) {
             )
           }
           send({ type: 'agent_complete', key, result: agentResult.result, usage: agentResult.usage })
+          fetch(`${origin}/api/log`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'agent',
+              data: { id: auditId, key, result: agentResult.result },
+            }),
+          }).catch(() => {})
           return agentResult
         } catch (err) {
           const fallback: AgentRunResult = {
@@ -768,6 +797,14 @@ export async function GET(request: Request) {
             usage: { input_tokens: 0, output_tokens: 0 },
           }
           send({ type: 'agent_complete', key, result: fallback.result, usage: fallback.usage })
+          fetch(`${origin}/api/log`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'agent',
+              data: { id: auditId, key, result: fallback.result },
+            }),
+          }).catch(() => {})
           return fallback
         }
       })
@@ -798,8 +835,6 @@ export async function GET(request: Request) {
       const durationMs = Date.now() - startTime
       const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
       const scores = Object.fromEntries(results.map(({ key, result }) => [key, ((result.score as number) || 0)]))
-      const auditId = crypto.randomUUID()
-
       send({
         type: 'complete',
         auditId,
@@ -816,7 +851,6 @@ export async function GET(request: Request) {
         model,
       })
 
-      const auditor = company ? `${name} @ ${company}` : name
       // Await the log write so the Edge function doesn't terminate before /api/log
       // completes its Neon INSERT. The browser already has the `complete` event —
       // the stream physically closing a second later is invisible to the user.

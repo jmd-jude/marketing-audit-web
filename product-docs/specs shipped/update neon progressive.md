@@ -1,8 +1,11 @@
+# 
+**`app/api/log/route.ts` — full replacement**
+
+```typescript
 import { appendFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { neon } from '@neondatabase/serverless'
 
-// Node runtime — can write files. Edge audit route POSTs here fire-and-forget.
 export const runtime = 'nodejs'
 
 const LOG_DIR = join(process.cwd(), 'logs')
@@ -24,7 +27,7 @@ export async function POST(request: Request) {
 
   const type = body.type ?? 'complete'
 
-  // ── init — INSERT empty row at audit start ──────────────────────
+  // ── NEW: init — INSERT empty row at audit start ──────────────────────
   if (type === 'init' && process.env.DATABASE_URL) {
     try {
       const sql = getDb()
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
     return new Response(null, { status: 204 })
   }
 
-  // ── agent — PATCH single agent result into payload ──────────────
+  // ── NEW: agent — PATCH single agent result into payload ──────────────
   if (type === 'agent' && process.env.DATABASE_URL) {
     try {
       const sql = getDb()
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     return new Response(null, { status: 204 })
   }
 
-  // ── complete — full write (unchanged behavior) ─────────────────
+  // ── EXISTING: complete — full write (unchanged behavior) ─────────────
   try {
     await ensureDir()
     if (body.text) {
@@ -112,3 +115,65 @@ export async function POST(request: Request) {
 
   return new Response(null, { status: 204 })
 }
+```
+
+Two things worth noting in the `complete` handler: I changed `ON CONFLICT DO NOTHING` to `DO UPDATE SET` — because now the row already exists from the `init` write, the original `DO NOTHING` would silently skip the final full write. The upsert ensures the complete payload always wins. And I extracted `getDb()` as a function so each handler gets a fresh connection rather than sharing one across the module.
+
+---
+
+**`app/api/audit/route.ts` — three surgical changes only**
+
+Change 1: move `auditId` to the top of `start()`, right before `notifyDiscordStart`:
+
+```typescript
+// BEFORE (near bottom of start()):
+const auditId = crypto.randomUUID()
+
+// AFTER (move to top of start(), before notifyDiscordStart):
+const auditId = crypto.randomUUID()
+const auditor = company ? `${name} @ ${company}` : name
+
+notifyDiscordStart({ name, company, url: targetUrl }).catch(() => {})
+```
+
+Change 2: after the `send({ type: 'fetched', ... })` call, add the init write:
+
+```typescript
+send({ type: 'fetched', ... }) // existing, unchanged
+
+// ADD after:
+fetch(`${origin}/api/log`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'init',
+    data: { id: auditId, timestamp: new Date().toISOString(), url: targetUrl, auditor },
+  }),
+}).catch(() => {})
+```
+
+Change 3: inside `promises.map()`, after the `send({ type: 'agent_complete', ... })` call:
+
+```typescript
+send({ type: 'agent_complete', key, result: agentResult.result, usage: agentResult.usage })
+
+// ADD after:
+fetch(`${origin}/api/log`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    type: 'agent',
+    data: { id: auditId, key, result: agentResult.result },
+  }),
+}).catch(() => {})
+
+return agentResult
+```
+
+Apply the same pattern in the `catch` block's fallback for failed agents — same shape, `result: fallback.result`.
+
+Also remove the `const auditor = ...` line near the bottom of `start()` since it moved up.
+
+---
+
+**That's the entire Level 1 refactor.** The `complete` write and Discord notification at the bottom are completely untouched. The SSE stream is completely untouched. The two-stage reveal is completely untouched. You get progressive persistence, a reliable `/audit/[id]` page that works mid-audit, and the foundation for DataForSEO writes to slot in via the same `agent` patch pattern when you're ready.

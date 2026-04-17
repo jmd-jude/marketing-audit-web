@@ -226,6 +226,8 @@ Claims that fail either filter are undifferentiated. Flag them specifically. Und
 
 **Step 4: GSC query lens (when data is available).** If GSC query data is provided, check for comparison and alternative search terms ("X vs Y," "best X for Y," "X alternative"). Presence or absence of these queries is direct evidence of how the market positions this company in evaluation contexts.
 
+**Step 5: DataForSEO competitive lens (when data is available).** If DataForSEO competitor data is provided, use actual traffic estimates and keyword overlap counts rather than inferring competitors from HTML alone. The 'intersections' count (shared keywords) is the strongest signal for how directly two domains compete. Higher traffic with more shared keywords means a more direct threat. Use real domains from this data to populate 'likely_competitors', and reference the traffic gap or parity in your findings.
+
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
 
 ## Scoring Dimensions
@@ -351,7 +353,7 @@ Complete all diagnostic steps internally before producing any output. Output JSO
 
 ## Benchmark Context
 
-Average PageSpeed Performance score for marketing sites is approximately 55–65 on mobile. Scores above 80 on mobile are top quartile. If GSC data is present, use index coverage and click trend direction as direct evidence for the SEO dimension rather than inferring from HTML alone.
+Average PageSpeed Performance score for marketing sites is approximately 55–65 on mobile. Scores above 80 on mobile are top quartile. If GSC data is present, use index coverage and click trend direction as direct evidence for the SEO dimension rather than inferring from HTML alone. If DataForSEO domain rank data is present, use the actual keyword count and estimated traffic as evidence for organic search presence — reference the specific numbers in your findings rather than estimating.
 
 ## Output Format
 
