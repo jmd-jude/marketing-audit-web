@@ -128,7 +128,15 @@ function ConnectModal({ source, onClose }: { source: DataSource; onClose: () => 
   )
 }
 
-export function DataSourcesPanel({ hasPageSpeed, googleConnected = false }: { hasPageSpeed: boolean; googleConnected?: boolean }) {
+export function DataSourcesPanel({
+  hasPageSpeed,
+  googleConnected = false,
+  pagesAnalyzed = [],
+}: {
+  hasPageSpeed: boolean
+  googleConnected?: boolean
+  pagesAnalyzed?: Array<{ url: string; status: string }>
+}) {
   const [expanded, setExpanded] = useState(false)
   const [selectedSource, setSelectedSource] = useState<DataSource | null>(null)
 
@@ -226,6 +234,15 @@ export function DataSourcesPanel({ hasPageSpeed, googleConnected = false }: { ha
                 ))}
               </div>
             </div>
+
+            {pagesAnalyzed.length > 0 && (
+              <div className="pt-1 border-t border-[#F0EDE8]">
+                <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-1.5">Pages analyzed</div>
+                <div className="text-xs text-[#6B6560]">
+                  homepage{pagesAnalyzed.filter((p) => p.status === 'fetched').map((p) => `, ${p.url}`).join('')}
+                </div>
+              </div>
+            )}
 
             <div className="pt-1 border-t border-[#F0EDE8] text-xs text-[#C4BFB8]">
               GA4 and Search Console data loads automatically when access has been granted. No login required.

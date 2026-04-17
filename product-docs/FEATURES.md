@@ -30,6 +30,9 @@ After audit completion, users can download a structured `.md` file containing al
 ### Data Sources Panel
 Post-audit panel shows which data sources were active in this audit and which are available at higher service tiers. Organized into three tiers (Standard / Connected / Agency). The upsell is embedded in the product: the gap between "what we analyzed" and "what richer data would unlock" is visible on every audit.
 
+### Multi-Page Crawl
+After fetching the homepage, the audit extracts nav links and fetches up to 3 interior pages in parallel. Pages are selected by matching URL patterns against a priority config (pricing scores highest, then about/services, then contact, etc.). Each fetched page is routed only to the agents that benefit from it — a pricing page goes to conversion and competitive, an about page goes to strategy and content. The technical agent receives homepage content only. Interior pages are truncated to 3,000 chars and injected as labeled sections in each agent's context. Fetches use a 4-second timeout; any timeout or error silently skips that page. The Data Sources panel (expanded) shows which pages were analyzed in the run.
+
 ### Connected Data (GA4 + Search Console)
 A GCP service account authenticates to Google APIs server-side. No user OAuth flow — when a client adds the service account as a Viewer on their GA4 property and Search Console property, data loads automatically for every subsequent audit of that domain. The audit route calls `/api/connected-data` on every run; if the service account has access, enriched context is injected into the relevant agents. If not, the audit runs Standard tier silently.
 
@@ -44,7 +47,6 @@ A run stats bar displays after each audit: model used, duration, total tokens co
 ## Out of Scope
 
 - **End-user accounts**: No login, no saved profiles. The tool has no user authentication layer.
-- **Multi-page crawling**: Analysis is limited to the homepage URL provided.
 - **Client-side audit history**: Results disappear on refresh. Server-side logging exists (see below), but nothing is returned to the browser for history views.
 - **White-labeling**: The tool is currently unbranded (agency name / logo not configurable).
 
@@ -52,7 +54,7 @@ A run stats bar displays after each audit: model used, duration, total tokens co
 
 ## Known Limitations
 
-- **Homepage-only**: Agents analyze only the fetched homepage HTML (truncated to 15k chars). Interior pages, blog posts, and landing pages are not analyzed.
+- **Pattern-matched interior pages only**: The multi-page crawl selects pages by URL pattern. Sites with unconventional URL structures (e.g. `/investment` instead of `/pricing`) won't have those pages fetched. JS-rendered navigations with no `<a href>` tags in the initial HTML return zero interior pages. The audit runs on whatever was fetched.
 - **Inference-heavy without connected data**: At the Standard tier, agents infer tracking setup, competitor landscape, and traffic channels from HTML signals only. Real data (GA4, GSC) materially improves accuracy for several agents.
 - **No client-side persistence**: Results are lost on page refresh. Server-side logs capture every completed audit (human-readable `logs/audit.log` and structured `logs/audit-data.jsonl`), but nothing is queryable or surfaced back to users.
 - **Rate-limited PageSpeed**: Without a Google API key, PageSpeed calls hit the unauthenticated rate limit — may degrade under concurrent load.

@@ -647,6 +647,7 @@ export default function Home() {
   const [inviteError, setInviteError] = useState('')
   const [auditCount, setAuditCount] = useState(0)
   const [dataConnected, setDataConnected] = useState(false)
+  const [pagesAnalyzed, setPagesAnalyzed] = useState<Array<{ url: string; status: string }>>([])
   const [summaryStatus, setSummaryStatus] = useState<'idle' | 'running' | 'complete'>('idle')
   const [summaryResult, setSummaryResult] = useState<ExecutiveSummary | null>(null)
   const [unlocked, setUnlocked] = useState(false)
@@ -712,6 +713,7 @@ export default function Home() {
               if (event.type === 'fetched') {
                 if (event.metadata) setPageMetadata(event.metadata)
                 if (event.connected) setDataConnected(true)
+                if (event.pagesAnalyzed) setPagesAnalyzed(event.pagesAnalyzed)
               }
             }
             if (event.type === 'agent_complete') {
@@ -785,6 +787,7 @@ export default function Home() {
     setName('')
     setCompany('')
     setPageMetadata(null)
+    setPagesAnalyzed([])
     setSummaryStatus('idle')
     setSummaryResult(null)
     setUnlocked(false)
@@ -1096,6 +1099,7 @@ export default function Home() {
                   (s) => s.result && (s.result as Record<string, unknown>).pagespeed
                 )}
                 googleConnected={dataConnected}
+                pagesAnalyzed={pagesAnalyzed}
               />
             )}
 

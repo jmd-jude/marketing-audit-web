@@ -21,7 +21,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `app/page.tsx` | Single-page UI — landing, audit progress, teaser/unlock results |
 | `app/audit/[id]/page.tsx` | Server component — fetches audit row from Neon by UUID, passes to client |
 | `app/audit/[id]/AuditReport.tsx` | Client component — renders shareable teaser/unlock report page |
-| `app/api/audit/route.ts` | Edge API route — fetches HTML + PageSpeed, runs 5 agents in parallel via SSE |
+| `app/api/audit/route.ts` | Edge API route — fetches HTML + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
 | `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
 | `app/api/auth/` | Stubbed OAuth routes (410 Gone) — no longer active, kept to avoid 404s |
@@ -39,7 +39,8 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 2. Discord **start ping** fires immediately (name + company + URL)
 3. API fetches page HTML (truncated to 15k chars), Google PageSpeed data, robots.txt/sitemap, **and GSC/GA4 via service account** — all in parallel
 4. Page metadata extracted from raw HTML before stripping (title, meta description, canonical, H1s, word count, structured data, OG tags)
-5. 5 Claude API calls fire simultaneously (one per agent), each receiving the HTML + PageSpeed data (technical agent only for PageSpeed)
+4a. Links extracted from raw homepage HTML; up to 3 interior pages selected by `PAGE_CONFIG` scoring and fetched in parallel (4s timeout, 3k char truncation each). Each page is routed to the agents it benefits — technical agent receives none.
+5. 5 Claude API calls fire simultaneously (one per agent), each receiving the HTML + PageSpeed data (technical agent only for PageSpeed) + any routed interior page content
 6. Results stream back to the browser via SSE (`text/event-stream`)
 7. Each agent card updates in real-time as responses complete
 8. Composite score = weighted average across 5 dimensions
@@ -104,6 +105,10 @@ See `product-docs/ROADMAP.md` for full backlog.
 - The API route (`app/api/audit/route.ts`) handles all data fetching and orchestration. Agent prompts should not contain fetch logic — context is passed in via `additionalContext` parameter.
 - All agent output is JSON only — prompts explicitly instruct the model not to wrap in markdown. The route strips fences defensively.
 - PageSpeed data is passed only to the technical agent. Other agents receive HTML only.
+- Interior page content is routed per `PAGE_CONFIG` in `route.ts` — pricing/contact go to conversion+competitive, about goes to strategy+content, services goes to competitive+content+strategy. Technical agent intentionally excluded. Content injected as `## Interior Page: /path` sections in `additionalContext`.
+- Interior page fetches use `Promise.allSettled` with a 4s timeout per page. A timeout or error on any page doesn't fail the audit — that page simply doesn't contribute. Zero interior pages is a valid outcome (JS-rendered navs, no pattern matches).
+- `pagesAnalyzed` is included in the `fetched` SSE event and in the `writeAuditLog` payload (queryable via `payload->'pagesAnalyzed'` in Postgres). The Data Sources panel surfaces fetched page paths when expanded.
+- www/non-www mismatch in hrefs is handled in `extractLinks` — both sides are normalized by stripping `www.` before comparing hostnames.
 - Discord has two events: `notifyDiscordStart` (fires before fetch, includes name + company + URL) and `notifyDiscord` (fires after completion, includes score + tokens). Both are fire-and-forget — never block the SSE stream on either.
 - The audit route always calls `/api/connected-data?siteUrl=...` before launching agents. The response is `{ gscContext: string | null, ga4Context: string | null }`. GSC context goes to `technical`, `strategy`, `competitive`, `content` agents. GA4 context goes to all five.
 - Token usage is tracked per-agent via `message.usage` and aggregated into the `complete` SSE event. Displayed in the run stats bar and Discord embed.
@@ -119,3 +124,4 @@ See `product-docs/ROADMAP.md` for full backlog.
 - Do not add server-side state or database calls to the API route without confirming Vercel Edge compatibility
 - Do not hardcode model names — always read from `process.env.ANTHROPIC_MODEL`
 - Do not increase the HTML truncation limit (currently 15k chars) without load-testing token costs — 5 parallel calls amplify fast
+- Do not increase the interior page truncation limit (currently 3k chars) without considering that up to 3 pages are routed to up to 4 agents simultaneously — cost amplifies fast
