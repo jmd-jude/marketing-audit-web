@@ -12,6 +12,7 @@ interface AgentRunResult {
   key: AgentKey
   result: Record<string, unknown>
   userMessage: string
+  systemPrompt: string
   usage: { input_tokens: number; output_tokens: number }
 }
 
@@ -424,6 +425,7 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
     key: agentKey,
     result,
     userMessage,
+    systemPrompt: agent.systemPrompt,
     usage: {
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
@@ -495,6 +497,7 @@ async function writeAuditLog(origin: string, payload: {
     inputTokens: number
     outputTokens: number
     userMessage: string
+    systemPrompt: string
     result: Record<string, unknown>
   }>
   summary: Record<string, unknown> | null
@@ -570,6 +573,7 @@ async function notifyDiscord(payload: {
   name: string
   company: string
   url: string
+  reportUrl: string
   compositeScore: number
   scores: Record<string, number>
   totalInputTokens: number
@@ -581,7 +585,7 @@ async function notifyDiscord(payload: {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL
   if (!webhookUrl) return
 
-  const { name, company, url, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed } = payload
+  const { name, company, url, reportUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed } = payload
   const totalTokens = totalInputTokens + totalOutputTokens
   const cost = ((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)
   const duration = (durationMs / 1000).toFixed(1)
@@ -617,6 +621,7 @@ async function notifyDiscord(payload: {
           { name: 'Token Usage', value: `↑ ${totalInputTokens.toLocaleString()} in  ↓ ${totalOutputTokens.toLocaleString()} out  (${totalTokens.toLocaleString()} total)`, inline: false },
           { name: 'Cost', value: `$${cost}`, inline: true },
           { name: 'Model', value: model, inline: true },
+          { name: 'Report', value: reportUrl, inline: false },
         ],
         timestamp: new Date().toISOString(),
       }],
@@ -794,6 +799,7 @@ export async function GET(request: Request) {
             key,
             result: { score: 0, error: String(err) },
             userMessage: '',
+            systemPrompt: AGENTS.find((a) => a.key === key)?.systemPrompt ?? '',
             usage: { input_tokens: 0, output_tokens: 0 },
           }
           send({ type: 'agent_complete', key, result: fallback.result, usage: fallback.usage })
@@ -866,19 +872,20 @@ export async function GET(request: Request) {
         gscContext,
         ga4Context,
         pagesAnalyzed,
-        agents: results.map(({ key, result, userMessage, usage }) => ({
+        agents: results.map(({ key, result, userMessage, systemPrompt, usage }) => ({
           key,
           score: (result.score as number) || 0,
           inputTokens: usage.input_tokens,
           outputTokens: usage.output_tokens,
           userMessage,
+          systemPrompt,
           result,
         })),
         summary: summaryResult,
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
       })
 
-      await notifyDiscord({ name, company, url: targetUrl, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+      await notifyDiscord({ name, company, url: targetUrl, reportUrl: `${origin}/audit/${auditId}`, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
         .catch(() => { /* non-critical */ })
 
       controller.close()

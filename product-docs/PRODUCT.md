@@ -1,31 +1,33 @@
 # Marketing Intelligence
 
 ## Vision
-Give a traditional direct mail agency the ability to deliver boardroom-quality digital marketing analysis — without hiring a digital team.
+Give any site owner or operator boardroom-quality digital marketing analysis — without hiring a team. Enter a URL, get a structured five-dimension audit in under 60 seconds.
 
 ## Problem
-Boutique agencies that built their business on direct mail and catalog work are being asked by clients to weigh in on their digital presence. They don't have the staff, tooling, or budget to do it properly. The gap between "we don't do that" and "we hired a specialist firm" has been expensive and embarrassing.
+There's a wide gap between "nothing" and "hire a digital agency." Most businesses operate in that gap — they know their site probably has problems, but they don't have the staff, budget, or time to diagnose them properly. This tool closes that gap.
 
-## Target User
-An agency strategist or account lead who needs to walk into a client meeting and speak credibly about that client's website marketing effectiveness — without spending three days pulling data manually.
+## Target User (evolving)
+Anyone responsible for a website's marketing performance who can't justify a full-service engagement. That includes agency strategists running audits on client sites, small business owners, and founders evaluating their own digital presence.
 
-*(Secondary: the agency's clients themselves, if the tool is eventually white-labeled and handed to them for self-service.)*
+The original framing was direct mail agencies specifically. That's still a real wedge, but the product isn't constrained to it.
 
 ## Value Proposition
-Enter any URL. Get a structured five-dimension marketing audit — scored, prioritized, and actionable — in under 60 seconds. No analyst, no briefing doc, no waiting.
+Enter any URL. Get a structured five-dimension marketing audit — scored, prioritized, and actionable — in under 60 seconds. The output is a shareable report that reads like it was produced by a specialist, not a developer tool.
 
-The output isn't a report card. It's a pitch artifact: a conversation starter the agency can use to expand scope, justify recommendations, and demonstrate expertise that didn't exist before.
+## Delivery Model (current)
+Concierge-first. The operator runs the audit, reviews the full results, then shares a persistent link (`/audit/[id]`) with the prospect.
 
-## Delivery Model (Current)
-Concierge-first. The operator runs the audit, reviews the full results, then shares a persistent link (`/audit/[id]`) with the prospect or client. The recipient sees a teaser — composite score, overall assessment, biggest strength, top priority finding. Full report (remaining priorities with action steps, quick wins, all five agent analyses) unlocks with a separate code the operator controls.
+The report has two zones:
+- **Free zone** — always visible. Composite score, agent sub-scores, overall assessment, data provenance, and all five top findings (what was found + why it matters, no action steps).
+- **Full report** — unlocked via `?full=1` URL param. Includes action steps, quick wins, copy rewrites, funnel analysis, and all five agent deep-dives in a tabbed layout.
 
-Two code pools:
-- **Invite codes** (`INVITE_CODES`) — gate running an audit. Handed out to control who can use the tool.
-- **Unlock codes** (`NEXT_PUBLIC_UNLOCK_CODES`) — gate the full report reveal. Held back until there's a reason to share — a conversation, a meeting, a payment.
+Gate flow: prospect sees the free zone, enters their email to request the full report. That fires a Discord notification to the operator with the email and the pre-built `?full=1` URL ready to send. Operator sends it on their timeline. The async delivery is intentional — it preserves the sense that a human reviewed and curated the output.
 
-This model keeps the operator in every deal during the concierge phase. Self-serve (Stripe paywall, per-audit pricing) is a later motion once the tool earns its value proposition in the market.
+A `/sample` page shows a full unlocked report (operator-chosen audit ID via `SAMPLE_AUDIT_ID` env var). Linked from the gate card so free-zone viewers can see what they're requesting before they commit.
+
+`INVITE_CODES` gates running an audit — controls who can generate new reports and manages API cost exposure.
+
+Self-serve (Stripe paywall, per-audit pricing) is a later motion once the value proposition has been validated in the market.
 
 ## Positioning
-This is not a general-purpose SEO tool (it's not replacing Ahrefs or Semrush). It's not a website grader (it's not Hubspot's free tool). It sits between "nothing" and "full digital audit engagement" — purpose-built for agencies that want to add a digital analysis layer to existing relationship-based work.
-
-The tier model (Standard → Connected → Agency) is intentional: the tool is designed to grow from a no-auth demo into a full connected-data platform as the agency's practice matures.
+Not a general-purpose SEO tool (not replacing Ahrefs or Semrush). Not a website grader (not Hubspot's free tool). A structured marketing intelligence report — five dimensions, scored and ranked, with specific recommendations — that can be produced for any site in under a minute.

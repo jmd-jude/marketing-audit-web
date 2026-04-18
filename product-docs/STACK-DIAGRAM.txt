@@ -1,0 +1,169 @@
+MARKETING AUDIT WEB — STACK & ARCHITECTURE (as of 2026-04-17)
+==============================================================
+
+
+  BROWSER
+  ──────────────────────────────────────────────────────────────────
+  app/page.tsx  (Next.js App Router, client component)
+    - Form: name + company + URL
+    - SSE consumer: renders progress bar + "N of 5 complete"
+    - On complete: shows teaser (score + verdict + top 3 priorities)
+    - "Full report ready" card -> links to /audit/{id}
+
+  app/audit/[id]/page.tsx  (server component, reads Neon by UUID)
+    └── AuditReport.tsx  (client component, full shareable report)
+
+
+  REQUEST FLOW
+  ──────────────────────────────────────────────────────────────────
+
+  User submits URL + name + company
+          │
+          ▼
+  GET /api/audit?url=...&name=...&company=...
+  ┌───────────────────────────────────────────────────────────────┐
+  │  Edge Runtime  (Vercel Edge Function, runtime = 'edge')       │
+  │  SSE stream: text/event-stream                                │
+  │                                                               │
+  │  1. Fire Discord start ping (fire-and-forget)                 │
+  │                                                               │
+  │  2. Parallel fetches:                                         │
+  │     a. Target URL HTML       (raw, 15k char truncation)       │
+  │        └─ extractPageMetadata() on raw HTML                   │
+  │        └─ fetchPageContent() strips scripts/styles            │
+  │     b. Google PageSpeed Insights API  -> scores + metrics     │
+  │     c. robots.txt + sitemap.xml                               │
+  │     d. POST /api/connected-data  -> GSC + GA4 context strings │
+  │     e. POST /api/competitive-data -> DataForSEO context strs  │
+  │                                                               │
+  │  3. extractLinks() from raw HTML -> score & route up to 3     │
+  │     interior pages (PAGE_CONFIG), fetch in parallel           │
+  │     (4s timeout, 3k char truncation, Promise.allSettled)      │
+  │     Page routing:                                             │
+  │       /pricing    -> conversion, competitive                  │
+  │       /about      -> strategy, content                        │
+  │       /services   -> competitive, content, strategy           │
+  │       /contact    -> conversion                               │
+  │       /process    -> strategy, content                        │
+  │       /case-stud  -> competitive, strategy                    │
+  │                                                               │
+  │  4. SSE event: "fetched"  (connected flag, pagesAnalyzed)     │
+  │                                                               │
+  │  5. 5 Claude API calls — parallel messages.create             │
+  │                                                               │
+  │     Agent               Weight   Receives                     │
+  │     ─────────────────── ──────   ─────────────────────────── │
+  │     Content & Messaging   25%    HTML, GSC, GA4, interior pgs │
+  │     Conversion / CRO      20%    HTML, GSC, GA4, interior pgs │
+  │     SEO & Technical       20%    HTML, GSC, GA4, PageSpeed    │
+  │     Brand & Growth        20%    HTML, GSC, GA4, interior pgs │
+  │                                  DataForSEO rank              │
+  │     Competitive           15%    HTML, GSC, GA4, interior pgs │
+  │                                  DataForSEO rank + competitors│
+  │                                                               │
+  │     Prompts + weights in lib/agents.ts                        │
+  │     All output: strict JSON (no markdown wrapping)            │
+  │                                                               │
+  │  6. SSE events per agent as each completes                    │
+  │                                                               │
+  │  7. Composite weighted score computed                         │
+  │                                                               │
+  │  8. SSE event: "complete"  (score, auditId UUID, token usage) │
+  │                                                               │
+  │  9. POST /api/log  (fire-and-forget)                          │
+  │ 10. Discord completion embed (score + tokens + /audit/{id})   │
+  └───────────────────────────────────────────────────────────────┘
+
+
+  DELEGATED API ROUTES (Node Runtime)
+  ──────────────────────────────────────────────────────────────────
+
+  /api/connected-data  (Node runtime — googleapis incompatible w/ Edge)
+    - GCP service account auth  (GOOGLE_SERVICE_ACCOUNT_KEY env var)
+    - discoverGa4PropertyId(domain)  lists all accessible properties
+    - GSC: webmasters.readonly    -> gscContext string | null
+    - GA4: analytics.readonly     -> ga4Context string | null
+    - Returns: { gscContext, ga4Context }
+
+  /api/competitive-data  (Node runtime)
+    - DataForSEO Labs API  (DATAFORSEO_LOGIN / _PASSWORD env vars)
+    - Domain rank overview  -> rankContext string
+    - Competitors domain    -> competitorsContext string
+    - Returns: { rankContext, competitorsContext }
+    - Graceful degradation if credentials missing
+
+  /api/log  (Node runtime)
+    - Writes to logs/audit.log  (append)
+    - Writes to logs/audit-data.jsonl  (newline-delimited JSON)
+    - Inserts row to Neon Postgres  (DATABASE_URL)
+
+  /api/admin/audits  (Node runtime)
+    - Reads audit rows from Neon
+
+  /api/auth/*  (stubbed, 410 Gone — OAuth no longer active)
+
+
+  PERSISTENCE
+  ──────────────────────────────────────────────────────────────────
+
+  Neon Postgres  (@neondatabase/serverless)
+    - One row per completed audit
+    - UUID primary key  -> shareable /audit/{id} URL
+    - Full agent output stored as JSONB
+    - Queryable: payload->'pagesAnalyzed', score, tokens, etc.
+
+  logs/audit-data.jsonl
+    - Local flat file; readable via logs/viewer.html
+
+  Discord #digital-marketing-audit-poc
+    - Start ping:       name + company + URL
+    - Completion embed: score + token count + /audit/{id} link
+
+
+  EXTERNAL SERVICES
+  ──────────────────────────────────────────────────────────────────
+
+  Anthropic API          claude-sonnet-4-6 (ANTHROPIC_MODEL env var)
+  Google PageSpeed API   (GOOGLE_PAGESPEED_API_KEY, falls back unauth)
+  Google Search Console  (service account, webmasters.readonly)
+  Google Analytics 4     (service account, analytics.readonly)
+  DataForSEO Labs API    (domain rank + competitors)
+  Neon Postgres          (DATABASE_URL pooled connection)
+  Discord Webhook        (DISCORD_WEBHOOK_URL)
+
+
+  DEPLOYMENT TARGET
+  ──────────────────────────────────────────────────────────────────
+
+  Vercel
+    - /api/audit            -> Edge Function  (SSE streaming)
+    - /api/connected-data   -> Node Function
+    - /api/competitive-data -> Node Function
+    - /api/log              -> Node Function
+    - /api/admin/audits     -> Node Function
+    - app/page.tsx          -> static/ISR page
+    - app/audit/[id]/       -> server-rendered from Neon
+
+
+  DATA TIERS (current)
+  ──────────────────────────────────────────────────────────────────
+
+  Standard (always runs)
+    HTML, PageSpeed Insights, robots.txt/sitemap, interior pages
+
+  Connected (always-on, service account)
+    Google Search Console + GA4
+    Client grants Viewer access once; no OAuth session required
+
+  Professional (always-on if credentials present)
+    DataForSEO Labs: domain rank + competitor domains
+
+  Agency (roadmap)
+    SEMrush/Ahrefs, Meta Ads, Klaviyo
+
+
+  GATES
+  ──────────────────────────────────────────────────────────────────
+
+  INVITE_CODES      server-side, gates running an audit
+  (unset = dev mode, gate disabled)

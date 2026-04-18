@@ -18,12 +18,13 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 
 | File | Purpose |
 |---|---|
-| `app/page.tsx` | Single-page UI — landing, audit progress, teaser/unlock results |
+| `app/page.tsx` | Single-page UI — landing, simplified progress state, teaser-only done state (score + verdict + top 3 priorities + "full report coming" close) |
 | `app/audit/[id]/page.tsx` | Server component — fetches audit row from Neon by UUID, passes to client |
-| `app/audit/[id]/AuditReport.tsx` | Client component — renders shareable teaser/unlock report page |
+| `app/audit/[id]/AuditReport.tsx` | Client component — renders shareable report page (canonical full-report destination) |
 | `app/api/audit/route.ts` | Edge API route — fetches HTML + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
 | `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
+| `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data (domain rank overview + competitors), returns formatted context strings |
 | `app/api/auth/` | Stubbed OAuth routes (410 Gone) — no longer active, kept to avoid 404s |
 | `lib/agents.ts` | All 5 agent system prompts + weights config |
 | `lib/gsc-ga4.ts` | Service account auth, GSC + GA4 API calls, GA4 property discovery, context formatters |
@@ -37,16 +38,15 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 
 1. User enters name, company (optional), and URL → `GET /api/audit?url=...&name=...&company=...`
 2. Discord **start ping** fires immediately (name + company + URL)
-3. API fetches page HTML (truncated to 15k chars), Google PageSpeed data, robots.txt/sitemap, **and GSC/GA4 via service account** — all in parallel
+3. API fetches page HTML (truncated to 15k chars), Google PageSpeed data, robots.txt/sitemap, GSC/GA4 via `/api/connected-data`, and DataForSEO competitive data via `/api/competitive-data` — all in parallel
 4. Page metadata extracted from raw HTML before stripping (title, meta description, canonical, H1s, word count, structured data, OG tags)
 4a. Links extracted from raw homepage HTML; up to 3 interior pages selected by `PAGE_CONFIG` scoring and fetched in parallel (4s timeout, 3k char truncation each). Each page is routed to the agents it benefits — technical agent receives none.
-5. 5 Claude API calls fire simultaneously (one per agent), each receiving the HTML + PageSpeed data (technical agent only for PageSpeed) + any routed interior page content
+5. 5 Claude API calls fire simultaneously. DataForSEO `rankContext` → technical + strategy agents. DataForSEO `competitorsContext` → competitive + strategy agents.
 6. Results stream back to the browser via SSE (`text/event-stream`)
-7. Each agent card updates in real-time as responses complete
-8. Composite score = weighted average across 5 dimensions
-9. Discord **completion embed** fires with name + company + score + token stats
-10. PageSpeed data surfaces in the technical agent card as a 4-pill Lighthouse score strip
-11. Data Inputs panel shows extracted page metadata (collapses, starts open)
+7. `page.tsx` renders a simplified progress state (spinner + status + "N of 5 complete" bar). No live agent cards.
+8. On `complete`, `page.tsx` shows teaser: score, overall verdict, top 3 priorities (findings + impact only, no actions). A "full report ready" card closes the page.
+9. Discord **completion embed** fires with score + tokens + a direct link to `/audit/{id}` for Jude to review and share
+10. Full report lives at `/audit/[id]` — server-rendered from Neon, shareable URL. Jude sends this link to the prospect at his timing.
 
 ## Agent Weights
 
@@ -67,9 +67,12 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `DISCORD_WEBHOOK_URL` | No | Start ping + completion notifications — points at #digital-marketing-audit-poc channel |
 | `GOOGLE_PAGESPEED_API_KEY` | No | Falls back to unauthenticated (rate-limited) |
 | `INVITE_CODES` | No | Comma-separated list of valid invite codes. Gates running an audit. If unset, gate is disabled (dev mode). |
-| `NEXT_PUBLIC_UNLOCK_CODES` | No | Comma-separated list of unlock codes. Gates full report reveal on both `page.tsx` and `/audit/[id]`. Client-side only — intentionally bypassable. |
+| `NEXT_PUBLIC_UNLOCK_CODES` | No | Deprecated — no longer used. Gate model changed to email capture + manual delivery. |
+| `SAMPLE_AUDIT_ID` | No | UUID of the audit to show at `/sample`. If unset, `/sample` returns 404. |
 | `DATABASE_URL` | Yes (for persistence) | Neon Postgres pooled connection string. |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | Connected tier | Full JSON key file contents (paste as one line). Service account in GCP `marketing-audit` project. |
+| `DATAFORSEO_LOGIN` | Professional tier | DataForSEO API login (from dashboard, not account password). |
+| `DATAFORSEO_PASSWORD` | Professional tier | DataForSEO API password. |
 
 ## Development
 
@@ -81,10 +84,11 @@ npm run lint      # ESLint
 
 ## Data Sources & Tier Model
 
-The `DataSourcesPanel` component renders post-audit showing what data sources were used and what's available at higher service tiers. This is intentional product design — the upsell is embedded in the UI.
+The `DataSourcesPanel` component exists in `components/DataSourcesPanel.tsx` but is not currently rendered anywhere — the tier/upsell framing has been deprioritized. Data source provenance is surfaced lightly in the report via the "What We Analyzed" section instead.
 
 **Standard:** Page HTML + PageSpeed Insights — always runs, no auth  
 **Connected (shipped):** GA4 + Search Console via service account — always-on, no session required. Data loads automatically when access has been granted.  
+**Professional (shipped — Labs only):** DataForSEO domain rank overview + competitors domain via `/api/competitive-data`. `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Backlinks API deprioritized (requires $100 minimum commitment). Graceful degradation if credentials missing.  
 **Agency (roadmap):** SEMrush/Ahrefs, Klaviyo, Meta Ads API  
 
 See `product-docs/ROADMAP.md` for full backlog.
@@ -115,8 +119,9 @@ See `product-docs/ROADMAP.md` for full backlog.
 - `extractPageMetadata` runs on raw HTML before stripping — must run before `fetchPageContent` strips scripts/styles or metadata regex will still work but word count will be inflated by JS. Currently correct: metadata extracted inside `fetchPageContent` on the raw response.
 - Name and company are passed as query params (`?name=&company=`). Company is optional; name is required by the UI but defaults to `'Unknown'` server-side if missing.
 - Every completed audit is persisted to Neon Postgres via a fire-and-forget POST to `/api/log`. The `complete` SSE event includes `auditId` (UUID). The log route writes to JSONL file + Postgres in parallel.
-- Two-code gate model: `INVITE_CODES` (server-side, gates running) and `NEXT_PUBLIC_UNLOCK_CODES` (client-side, gates full report reveal). During `running` phase all agent output streams live. On `done`, results switch to teaser mode until unlock code is entered.
-- The shareable `/audit/[id]` page fetches from Neon server-side and renders the same teaser/unlock UX using the same `NEXT_PUBLIC_UNLOCK_CODES` pool.
+- Gate model on `/audit/[id]`: free zone (score, assessment, provenance, all 5 findings without action steps) is always visible. Full report (priority actions, quick wins, agent deep-dives in tabs) requires unlock. Unlock is triggered by `?full=1` in the URL — operator sends `https://…/audit/[id]?full=1` to the prospect after receiving their email via Discord. Email capture fires `POST /api/gate` which pings Discord with email + the pre-built `?full=1` URL. Prospect sees a confirmation state ("We'll send your report shortly") — not instant unlock.
+- `INVITE_CODES` (server-side) still gates running an audit. `NEXT_PUBLIC_UNLOCK_CODES` is deprecated and unused.
+- `/sample` page renders a full unlocked report for `SAMPLE_AUDIT_ID`. Linked from the gate card so free-zone viewers can see what the full report looks like before requesting their own.
 
 ## What Not to Do
 

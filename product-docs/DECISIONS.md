@@ -32,9 +32,9 @@
 
 ---
 
-**Decision:** Upsell tier model embedded in the product UI  
-**Why:** The Data Sources Panel makes the gap between "what we analyzed" and "what we could analyze with richer data" visible in every audit. This is intentional — the agency uses it to scope and justify a Connected or Agency tier engagement.  
-**Tradeoff:** The panel shows features that don't work yet. This is acceptable as a roadmap signal but would need to be hardened before self-service client access.
+**Decision:** Data provenance shown as credibility signal, not tier upsell  
+**Why:** The `DataSourcesPanel` component (tier upsell framing) has been deprioritized. Instead, a lightweight "What We Analyzed" tag cluster in the report shows what data sources powered the audit — PageSpeed, interior pages, GSC/GA4, competitive data. This builds credibility without implying a SaaS product pricing ladder that doesn't exist yet.  
+**Tradeoff:** Loses the explicit upsell surface. Can be revisited when self-serve tiers become real.
 
 ---
 
@@ -65,6 +65,12 @@
 **Decision:** Discord webhook for monitoring, not a dashboard  
 **Why:** Low overhead. The agency doesn't need a metrics dashboard right now — Discord gives visibility into usage, token costs, and scores without building instrumentation.  
 **Tradeoff:** Not scalable if usage grows significantly. No historical log or aggregation.
+
+---
+
+**Decision:** Full report gate is email capture + manual operator delivery, not a code or instant unlock  
+**Why:** Instant unlock removes the operator from the loop and feels like a self-serve product that doesn't yet exist. Code-based unlock requires sending two things. Email capture fires a Discord ping with the prospect's email and the pre-built `?full=1` URL — operator sends it when ready. The async gap is intentional: it supports the perception that a human reviewed the output, which is worth preserving during validation.  
+**Tradeoff:** Dependent on operator responsiveness. Doesn't scale without automation (email infra, Stripe) but that's fine for the concierge phase.
 
 ---
 

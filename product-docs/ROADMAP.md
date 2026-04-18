@@ -2,11 +2,12 @@
 
 ## Tier Model (Conceptual)
 
-| Tier | Data Sources | Price Signal |
-|---|---|---|
-| **Standard** | Page HTML + PageSpeed Insights | Base |
-| **Connected** | + GA4 + Search Console (OAuth) | ~5x |
-| **Agency** | + SEMrush/Ahrefs + Klaviyo + Meta Ads | Custom |
+| Tier | Data Sources | Price Signal | Status |
+|---|---|---|---|
+| **Standard** | Page HTML + PageSpeed Insights | Base | Shipped |
+| **Connected** | + GA4 + Search Console | ~5x | Shipped |
+| **Professional** | + DataForSEO Labs (domain rank + competitors) | ~10x | Shipped (Labs only — Backlinks deferred) |
+| **Agency** | + SEMrush/Ahrefs + Klaviyo + Meta Ads | Custom | Roadmap |
 
 ---
 
@@ -45,6 +46,22 @@
 - [x] **Service account connected tier** *(replaces OAuth)*
   OAuth flow was removed. A GCP service account authenticates to Google APIs server-side. No user-facing connect step — clients manually add the service account as a Viewer on their GA4 and Search Console properties. Data loads automatically on every subsequent audit of that domain. All OAuth routes return 410 Gone.
   _Status: Shipped — `/api/connected-data`, `lib/gsc-ga4.ts`_
+
+---
+
+### Tier 2.5 — Professional Tier (DataForSEO)
+
+- [x] **DataForSEO Labs integration** — domain rank overview + competitors domain
+  `/api/competitive-data` route (Node runtime, mirrors `/api/connected-data` pattern). Two parallel Labs endpoints: `domain_rank_overview/live` (organic traffic, keyword count, ranking positions, momentum signals) + `competitors_domain/live` (top 10 competitors by keyword overlap, traffic estimates, avg SERP position). `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Graceful degradation if credentials missing. `competitive: true` flag on SSE `fetched` event. DataSourcesPanel shows Professional tier as active when DataForSEO data was returned.
+  _Status: Shipped — credentials: `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` in `.env.local`_
+
+- [ ] **DataForSEO Backlinks API** — domain authority + link profile health
+  `backlinks/summary/live` endpoint: domain rank (0–1000), referring domains, spam score, broken backlinks. Routes to technical + competitive agents. Deprioritized — requires $100 minimum commitment in DataForSEO dashboard. Infrastructure is ready to add when committed.
+  _Effort: S (infrastructure exists) | Impact: M | Blocked: $100 activation fee_
+
+- [ ] **DataForSEO LLM Mentions API** — AI visibility tracking
+  How does this brand appear in ChatGPT, Perplexity, and other LLM outputs? Entirely novel dimension for direct mail / catalog clients who are blind to their AI presence. Strong candidate for a 6th agent or add-on audit section.
+  _Effort: M | Impact: H (differentiation) | Priority: Evaluate after backlinks_
 
 ---
 
@@ -109,6 +126,18 @@
 - [x] **Saved audit history** (localStorage or DB)
   Results disappear on refresh currently. localStorage is a quick win; Vercel Postgres/Supabase for multi-session.
   _Effort: S–M | Impact: M_
+
+- [x] **page.tsx teaser-only done state**
+  Removed live agent cards, unlock gate, and markdown download from the run page. Done state now shows: score, overall verdict, top 3 priorities (findings + business impact, no actions). Closes with "Your full report is ready. Expect it from Jude shortly." No gate — full report lives at `/audit/[id]`.
+  _Status: Shipped_
+
+- [x] **`/audit/[id]` as canonical report + Discord report link**
+  Full report is the shareable, unguessable UUID URL. Jude holds it and sends it to the prospect at his timing. Discord completion embed now includes a direct "Report" field linking to the `/audit/{id}` URL for immediate access.
+  _Status: Shipped_
+
+- [ ] **`/audit/[id]` full report design**
+  The `/audit/[id]` page (`AuditReport.tsx`) is the canonical full-report surface. Needs a design pass to match the product's visual quality — currently functional but not polished. `logs/viewer.html` is the reference baseline for data rendering. Should show all five agent dimensions, executive summary, quick wins, before/afters, and the Professional tier data sources badge when DataForSEO was active.
+  _Effort: M | Impact: H | Priority: High — this is what the prospect sees_
 
 - [ ] **Side-by-side competitor audit**
   Run the same audit on a competitor URL and display results in parallel columns. Natural upsell conversation starter — though a motivated user can already do this by running audits separately.
