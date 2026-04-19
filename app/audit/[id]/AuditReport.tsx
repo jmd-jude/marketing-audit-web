@@ -15,6 +15,15 @@ const AGENT_LABELS: Record<string, string> = {
 
 const AGENT_ORDER = ['content', 'conversion', 'technical', 'strategy', 'competitive']
 
+const NAV_SECTIONS = [
+  { id: 'section-recommendations', label: 'Overview' },
+  { id: 'section-content',         label: 'Content' },
+  { id: 'section-conversion',      label: 'Conversion' },
+  { id: 'section-technical',       label: 'SEO & Technical' },
+  { id: 'section-strategy',        label: 'Strategy' },
+  { id: 'section-competitive',     label: 'Competitive' },
+]
+
 function scoreColor(s: number) {
   if (s >= 75) return 'text-emerald-700'
   if (s >= 55) return 'text-amber-600'
@@ -71,6 +80,20 @@ function SevBadge({ sev }: { sev: string }) {
   )
 }
 
+function DocSectionTitle({ title, score }: { title: string; score?: number }) {
+  return (
+    <div className="flex items-baseline justify-between pb-3 border-b border-[#E8E4DC] mb-5">
+      <h2 className="font-serif text-lg font-semibold text-[#1A1918]">{title}</h2>
+      {score != null && (
+        <div className="flex items-baseline gap-1.5">
+          <span className={`text-2xl font-black tabular-nums ${scoreColor(score)}`}>{score}</span>
+          {/* <span className={`text-xs font-medium ${scoreColor(score)}`}>{scoreLabel(score)}</span> */}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── free zone sections ───────────────────────────────────────────────────────
 
 function AgentScoreStrip({ agents }: { agents: D[] }) {
@@ -121,24 +144,6 @@ function WhatWeAnalyzed({ data }: { data: D }) {
             {p}
           </span>
         ))}
-      </div>
-    </div>
-  )
-}
-
-function FullAccessBanner() {
-  return (
-    <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5 flex items-start gap-4">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mt-0.5">
-        <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-      <div>
-        <div className="text-sm font-semibold text-[#1A1918] mb-0.5">Full report</div>
-        <p className="text-sm text-[#6B6560] leading-relaxed">
-          Action steps for each finding, quick wins, copy rewrites, funnel analysis, and a competitive breakdown — all in the tabs below.
-        </p>
       </div>
     </div>
   )
@@ -252,6 +257,12 @@ function GateCard({
         </form>
         {error && <p className="text-red-300 text-xs">Something went wrong — try again.</p>}
         <p className="text-[#7A9AB8] text-xs">No account required.</p>
+        <p className="text-[#7A9AB8] text-xs">
+          Curious what the full report looks like?{' '}
+          <a href="/sample" className="text-[#A8C0D8] hover:text-white underline transition-colors">
+            See an example →
+          </a>
+        </p>
       </div>
     </div>
   )
@@ -607,20 +618,53 @@ function BiggestLever({ lever }: { lever: string }) {
 }
 
 
+// ─── sticky nav bar (unlocked only) ──────────────────────────────────────────
+
+function StickyBar({
+  displayName,
+  compositeScore,
+  activeSection,
+  onNav,
+}: {
+  displayName: string
+  compositeScore: number
+  activeSection: string
+  onNav: (id: string) => void
+}) {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#E8E4DC] shadow-sm">
+      <div className="max-w-[1160px] mx-auto px-6 h-12 relative flex items-center">
+        {/* <div className="absolute left-6 flex items-center gap-3">
+          <span className="text-xs font-semibold text-[#6B6560] truncate max-w-[140px]">{displayName}</span>
+          <span className={`text-sm font-black tabular-nums ${scoreColor(compositeScore)}`}>{compositeScore}</span>
+          <span className={`text-[10px] font-semibold ${scoreColor(compositeScore)}`}>{scoreLabel(compositeScore)}</span>
+          <div className="w-px h-4 bg-[#E8E4DC]" />
+        </div> */}
+        <div className="mx-auto flex items-center gap-0.5 overflow-x-auto">
+          {NAV_SECTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => onNav(id)}
+              className={`flex-shrink-0 text-md px-3 py-1.5 rounded-md transition-colors ${
+                activeSection === id
+                  ? 'bg-[#EEF2F8] text-[#2D4A6E] font-bold'
+                  : 'text-[#9C9690] hover:text-[#1A1918]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
-const GATED_TABS = [
-  { key: 'recommendations', label: 'Recommendations' },
-  { key: 'content',         label: 'Content' },
-  { key: 'conversion',      label: 'Conversion' },
-  { key: 'technical',       label: 'SEO & Technical' },
-  { key: 'strategy',        label: 'Strategy' },
-  { key: 'competitive',     label: 'Competitive' },
-]
-
-export default function AuditReport({ data }: { data: D }) {
-  const [unlocked, setUnlocked] = useState(false)
-  const [activeTab, setActiveTab] = useState('recommendations')
+export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?: boolean }) {
+  const [unlocked, setUnlocked] = useState(autoUnlock ?? false)
+  const [activeSection, setActiveSection] = useState('section-recommendations')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -640,151 +684,163 @@ export default function AuditReport({ data }: { data: D }) {
     .map((key) => agents.find((a) => a.key === key))
     .filter((a): a is D => Boolean(a))
 
+  function navTo(id: string) {
+    setActiveSection(id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const activeAgent = orderedAgents.find((a) => `section-${a.key}` === activeSection)
+
   return (
     <div className="min-h-screen bg-[#F4F2EF] py-12 px-4">
-      <div className="max-w-[900px] mx-auto space-y-4">
+
+      {unlocked && (
+        <StickyBar
+          displayName={displayName}
+          compositeScore={compositeScore}
+          activeSection={activeSection}
+          onNav={navTo}
+        />
+      )}
+
+      <div className={`mx-auto space-y-4 ${unlocked ? 'max-w-[1160px] pt-8' : 'max-w-[900px]'}`}>
 
         {/* Header */}
         <div className="mb-8">
-          <div className="text-xs font-semibold uppercase tracking-widest text-[#9C9690] mb-1">
+          <div className="text-lg font-semibold uppercase tracking-widest text-[#9C9690] mb-1">
             Marketing Audit
           </div>
-          <h1 className="font-serif text-3xl font-bold text-[#1A1918] tracking-tight">
+          <h1 className="font-serif text-xl font-semibold text-[#1A1918] tracking-tight">
             {displayName}
           </h1>
-          <div className="text-sm text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
+          <div className="text-lg text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
         </div>
 
-        {/* Score block */}
-        <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
-          <div className="px-6 py-6 flex items-center justify-between gap-6">
-            <div>
-              <div className="font-serif text-base text-[#6B6560] break-all">{data.url}</div>
-              <div className={`text-lg font-bold mt-1 ${scoreColor(compositeScore)}`}>
-                {scoreLabel(compositeScore)}
+        {/* Free state: score block, assessment, what we analyzed, findings, gate */}
+        {!unlocked && (
+          <>
+            <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+              <div className="px-6 py-6 flex items-center justify-between gap-6">
+                <div>
+                  <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
+                  <div className={`text-lg mt-1 ${scoreColor(compositeScore)}`}>
+                    {scoreLabel(compositeScore)}
+                  </div>
+                </div>
+                <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
+                  <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
+                    {compositeScore}
+                  </div>
+                  <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
+                </div>
               </div>
+              <AgentScoreStrip agents={agents} />
             </div>
-            <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
-              <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
-                {compositeScore}
-              </div>
-              <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
-            </div>
-          </div>
-          <AgentScoreStrip agents={agents} />
-        </div>
 
-        {/* Overall assessment */}
-        {summary.overall_verdict && (
-          <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-            <SectionLabel>Overall Assessment</SectionLabel>
-            <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
-          </div>
+            {summary.overall_verdict && (
+              <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                <SectionLabel>Overall Assessment</SectionLabel>
+                <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
+              </div>
+            )}
+
+            <WhatWeAnalyzed data={data} />
+            <TopFindings priorities={priorities} />
+            <GateCard
+              auditId={data.id}
+              url={data.url}
+              auditor={data.auditor}
+            />
+          </>
         )}
 
-        {/* What we analyzed */}
-        <WhatWeAnalyzed data={data} />
+        {/* Unlocked state: tab content */}
+        {unlocked && (
+          <div className="pt-2">
 
-        {/* Top findings — all 5 when gated, banner when unlocked */}
-        {unlocked ? <FullAccessBanner /> : <TopFindings priorities={priorities} />}
+            {activeSection === 'section-recommendations' && (
+              <div className="space-y-4">
 
-        {/* Gate or gated content */}
-        {!unlocked ? (
-          <GateCard
-            auditId={data.id}
-            url={data.url}
-            auditor={data.auditor}
-          />
-        ) : (
-          <div className="space-y-0">
-
-            {/* Tab strip */}
-            <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
-              <div className="flex overflow-x-auto border-b border-[#E8E4DC]">
-                {GATED_TABS.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`flex-shrink-0 px-5 py-3.5 text-xs font-semibold transition-colors whitespace-nowrap border-b-2 -mb-px ${
-                      activeTab === tab.key
-                        ? 'border-[#2D4A6E] text-[#2D4A6E]'
-                        : 'border-transparent text-[#9C9690] hover:text-[#1A1918]'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="px-6 py-6 space-y-6">
-
-                {activeTab === 'recommendations' && (
-                  <>
-                    <PriorityActions priorities={priorities} />
-                    <QuickWins wins={summary.quick_wins ?? []} />
-                    {summary.biggest_strength && (
-                      <div>
-                        <SectionLabel>Biggest Strength</SectionLabel>
-                        <p className="text-sm text-[#1A1918] leading-relaxed">{summary.biggest_strength}</p>
+                {/* Score block — re-orients the reader on open */}
+                <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+                  <div className="px-6 py-6 flex items-center justify-between gap-6">
+                    <div>
+                      <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
+                      <div className={`text-lg mt-1 ${scoreColor(compositeScore)}`}>
+                        {scoreLabel(compositeScore)}
                       </div>
-                    )}
-                  </>
+                    </div>
+                    <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
+                      <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
+                        {compositeScore}
+                      </div>
+                      <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
+                    </div>
+                  </div>
+                  <AgentScoreStrip agents={agents} />
+                </div>
+
+                {summary.overall_verdict && (
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                    <SectionLabel>Overall Assessment</SectionLabel>
+                    <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
+                  </div>
                 )}
 
-                {activeTab !== 'recommendations' && (() => {
-                  const agent = orderedAgents.find((a) => a.key === activeTab)
-                  if (!agent) return null
-                  const r: D = agent.result ?? {}
-                  return (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3">
-                        <span className={`text-3xl font-black tabular-nums ${scoreColor(agent.score)}`}>
-                          {agent.score}
-                        </span>
-                        <div>
-                          <div className="text-sm font-semibold text-[#1A1918]">{AGENT_LABELS[agent.key]}</div>
-                          <div className={`text-xs font-medium ${scoreColor(agent.score)}`}>{scoreLabel(agent.score)}</div>
-                        </div>
-                      </div>
-
-                      <Dimensions dims={r.dimensions} />
-                      <StringList items={r.wins} label="Strengths" marker="+" markerClass="text-emerald-600" />
-                      <StringList items={r.critical_fixes} label="Critical Fixes" marker="!" markerClass="text-red-600" />
-                      <CopyRewrites items={r.before_after} />
-                      <StringList items={r.quick_wins} label="Conversion Quick Wins" marker="→" markerClass="text-emerald-600" />
-                      <FunnelLeaks leaks={r.funnel_leaks} />
-                      <AbTests tests={r.ab_tests} />
-                      <PageSpeed ps={r.pagespeed} />
-                      <StringList items={r.seo_quick_wins} label="SEO Quick Wins" marker="→" markerClass="text-emerald-600" />
-                      <TechnicalIssues issues={r.technical_issues} />
-                      <TrackingStatus tracking={r.tracking_status} />
-                      <Competitors comps={r.likely_competitors} />
-                      <Opportunities opps={r.opportunities} />
-                      <StringList items={r.recommended_actions} label="Recommended Actions" marker="→" markerClass="text-[#2D4A6E]" />
-                      {(r.brand_score != null || r.growth_score != null) && (
-                        <div className="flex gap-6">
-                          {r.brand_score != null && (
-                            <div className="text-center">
-                              <div className={`text-2xl font-black tabular-nums ${scoreColor(r.brand_score)}`}>{r.brand_score}</div>
-                              <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Brand</div>
-                            </div>
-                          )}
-                          {r.growth_score != null && (
-                            <div className="text-center">
-                              <div className={`text-2xl font-black tabular-nums ${scoreColor(r.growth_score)}`}>{r.growth_score}</div>
-                              <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Growth</div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <BiggestLever lever={r.biggest_lever} />
-                      <RevenueOpportunities rev={r.revenue_opportunities} />
-                    </div>
-                  )
-                })()}
-
+                <WhatWeAnalyzed data={data} />
+                <PriorityActions priorities={priorities} />
+                <QuickWins wins={summary.quick_wins ?? []} />
+                {summary.biggest_strength && (
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                    <SectionLabel>Biggest Strength</SectionLabel>
+                    <p className="text-sm text-[#1A1918] leading-relaxed">{summary.biggest_strength}</p>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
+            {activeAgent && (() => {
+              const r: D = activeAgent.result ?? {}
+              return (
+                <div className="space-y-4">
+                  <DocSectionTitle title={AGENT_LABELS[activeAgent.key]} score={activeAgent.score} />
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-6 space-y-6">
+                    <Dimensions dims={r.dimensions} />
+                    <StringList items={r.wins} label="Strengths" marker="+" markerClass="text-emerald-600" />
+                    <StringList items={r.critical_fixes} label="Critical Fixes" marker="!" markerClass="text-red-600" />
+                    <CopyRewrites items={r.before_after} />
+                    <StringList items={r.quick_wins} label="Conversion Quick Wins" marker="→" markerClass="text-emerald-600" />
+                    <FunnelLeaks leaks={r.funnel_leaks} />
+                    <AbTests tests={r.ab_tests} />
+                    <PageSpeed ps={r.pagespeed} />
+                    <StringList items={r.seo_quick_wins} label="SEO Quick Wins" marker="→" markerClass="text-emerald-600" />
+                    <TechnicalIssues issues={r.technical_issues} />
+                    <TrackingStatus tracking={r.tracking_status} />
+                    <Competitors comps={r.likely_competitors} />
+                    <Opportunities opps={r.opportunities} />
+                    <StringList items={r.recommended_actions} label="Recommended Actions" marker="→" markerClass="text-[#2D4A6E]" />
+                    {(r.brand_score != null || r.growth_score != null) && (
+                      <div className="flex gap-6">
+                        {r.brand_score != null && (
+                          <div className="text-center">
+                            <div className={`text-2xl font-black tabular-nums ${scoreColor(r.brand_score)}`}>{r.brand_score}</div>
+                            <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Brand</div>
+                          </div>
+                        )}
+                        {r.growth_score != null && (
+                          <div className="text-center">
+                            <div className={`text-2xl font-black tabular-nums ${scoreColor(r.growth_score)}`}>{r.growth_score}</div>
+                            <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Growth</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <BiggestLever lever={r.biggest_lever} />
+                    <RevenueOpportunities rev={r.revenue_opportunities} />
+                  </div>
+                </div>
+              )
+            })()}
 
           </div>
         )}
@@ -792,8 +848,8 @@ export default function AuditReport({ data }: { data: D }) {
         {/* Footer */}
         <div className="text-center text-xs text-[#9C9690] pt-4 pb-8">
           Questions about this report?{' '}
-          <a href="mailto:jude.hoffner@gmail.com" className="text-[#2D4A6E] hover:underline">
-            jude.hoffner@gmail.com
+          <a href="mailto:jude@hoffnermarketing.com" className="text-[#2D4A6E] hover:underline">
+            jude@hoffnermarketing.com
           </a>
         </div>
 
