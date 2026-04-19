@@ -846,11 +846,16 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
         )}
 
         {/* Footer */}
-        <div className="text-center text-xs text-[#9C9690] pt-4 pb-8">
-          Questions about this report?{' '}
-          <a href="mailto:jude@hoffnermarketing.com" className="text-[#2D4A6E] hover:underline">
-            jude@hoffnermarketing.com
-          </a>
+        <div className="text-center text-xs text-[#9C9690] pt-4 pb-8 space-y-2">
+          <div>
+            <a href="/" className="text-[#2D4A6E] hover:underline">Run another audit on any site →</a>
+          </div>
+          <div>
+            Questions about this report?{' '}
+            <a href="mailto:jude@hoffnermarketing.com" className="text-[#2D4A6E] hover:underline">
+              jude@hoffnermarketing.com
+            </a>
+          </div>
         </div>
 
       </div>

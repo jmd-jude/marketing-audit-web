@@ -15,7 +15,7 @@ The original framing was direct mail agencies specifically. That's still a real 
 Enter any URL. Get a structured five-dimension marketing audit — scored, prioritized, and actionable — in under 60 seconds. The output is a shareable report that reads like it was produced by a specialist, not a developer tool.
 
 ## Delivery Model (current)
-Concierge-first. The operator runs the audit, reviews the full results, then shares a persistent link (`/audit/[id]`) with the prospect.
+Concierge for full report, or send site to propsect with a use code, they see free report, request the full while validating. I can review the full results, then shares a persistent link (`/audit/[id]`) with the prospect.
 
 The report has two zones:
 - **Free zone** — always visible. Composite score, agent sub-scores, overall assessment, data provenance, and all five top findings (what was found + why it matters, no action steps).

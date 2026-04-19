@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { AGENTS, WEIGHTS } from '@/lib/agents'
+
 import { DataSourcesPanel } from '@/components/DataSourcesPanel'
 
 interface ExecutiveSummary {
@@ -199,7 +199,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F4F2EF]">
       <header className="bg-white border-b border-[#E8E4DC] px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence</h1>
             {phase === 'idle'
@@ -215,7 +215,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-14">
+      <main className="max-w-5xl mx-auto px-6 py-14">
 
         {/* ── IDLE: run limit hit ── */}
         {phase === 'idle' && auditCount >= RUN_LIMIT && (
@@ -245,11 +245,12 @@ export default function Home() {
           <div className="text-center space-y-10">
             <div className="space-y-4">
               <h2 className="font-display text-[#1A1918]" style={{ fontSize: 'clamp(2.4rem, 4.5vw, 3.8rem)', lineHeight: 1.1 }}>
-                Digital Marketing Audit
+                Digital Marketing Audits
               </h2>
               <p className="text-[#6B6560] text-lg max-w-xl mx-auto leading-relaxed">
-                Enter any website. Five dimension analysis — content, conversion, SEO, positioning, and brand strategy.
+                Enter any website URL. Receive a scored report with specific findings and action steps across 5 dimensions: content, conversion, SEO, competitive positioning, and brand strategy.
               </p>
+              <p className="text-[#9C9690] text-md">See first findings in about two minutes. No account required.</p>
             </div>
 
             <div className="max-w-lg mx-auto space-y-3">
@@ -303,16 +304,86 @@ export default function Home() {
               )}
             </div>
 
-            <div className="border-t border-[#E8E4DC] pt-8 grid grid-cols-5 gap-4 max-w-2xl mx-auto">
-              {AGENTS.map((a) => (
-                <div key={a.key} className="text-center space-y-2">
-                  <div className="w-10 h-10 rounded-full border border-[#E8E4DC] bg-white mx-auto flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-[#2D4A6E]/25" />
+            <p className="text-[#9C9690] text-md">
+              Not sure what to expect?{' '}
+              <a href="/sample" className="text-[#2D4A6E] hover:underline">See a sample report →</a>
+            </p>
+
+            {/* ── Scope + preview section ── */}
+            <div className="border-t border-[#E8E4DC] pt-10 text-left">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+
+                {/* Left: five dimensions + data inputs */}
+                <div className="lg:col-span-3 bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+                  <div className="divide-y divide-[#E8E4DC]">
+                    {[
+                      { label: 'Content & Messaging', desc: 'Headline strength, value prop clarity, copy specificity, and whether your pages communicate what you do and why it matters.' },
+                      { label: 'Conversion', desc: 'CTA structure, friction points, funnel integrity, and the gaps between visitor intent and the actions you need them to take.' },
+                      { label: 'SEO & Technical', desc: 'Page speed, Core Web Vitals, crawlability, on-page signals, and the technical health Google uses to rank and index.' },
+                      { label: 'Brand & Strategy', desc: 'Positioning clarity, differentiation strength, audience alignment, and where your growth signals point.' },
+                      { label: 'Competitive Positioning', desc: 'How you compare to likely competitors on keyword territory, organic traffic, and market messaging.' },
+                    ].map(({ label, desc }) => (
+                      <div key={label} className="px-5 py-3.5 flex gap-4 items-baseline">
+                        <span className="text-xs font-semibold text-[#2D4A6E] w-40 flex-shrink-0">{label}</span>
+                        <p className="text-xs text-[#6B6560] leading-relaxed">{desc}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="text-[#6B6560] text-xs leading-tight">{a.label}</div>
-                  <div className="text-[#C4BFB8] text-xs">{Math.round(WEIGHTS[a.key] * 100)}%</div>
+                  <div className="border-t border-[#E8E4DC] px-5 py-3.5 bg-[#F9F7F5]">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-2">What we pull in</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                      {[
+                        'Homepage + interior pages',
+                        'Google PageSpeed Insights',
+                        'Robots.txt + sitemap',
+                        'Google Search Console¹',
+                        'Google Analytics 4¹',
+                        'Competitive intelligence',
+                      ].map((source) => (
+                        <span key={source} className="text-xs text-[#4A4540]">{source}</span>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[#9C9690] mt-2">¹ When access is granted</p>
+                  </div>
                 </div>
-              ))}
+
+                {/* Right: report card mockup */}
+                <div className="lg:col-span-2">
+                  <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+                    <div className="px-5 py-4 flex items-center gap-4 border-b border-[#E8E4DC]">
+                      <div className="flex-shrink-0 border-2 rounded-xl px-4 py-2.5 text-center bg-amber-50 border-amber-200">
+                        <div className="text-3xl font-black tabular-nums text-amber-600 leading-none">58</div>
+                        <div className="text-[9px] text-[#9C9690] uppercase tracking-widest mt-1">/ 100</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-amber-600">www.example.com</div>
+                      </div>
+                    </div>
+                    <div className="px-5 py-4 space-y-3">
+                      <div className="text-[9px] font-bold uppercase tracking-widest text-[#9C9690]">Top Findings</div>
+                      {[
+                        { area: 'Content', finding: 'Homepage headline doesn\'t communicate the core offer — visitors can\'t immediately tell what you do or who it\'s for.' },
+                        { area: 'Conversion', finding: 'No clear primary CTA above the fold. Purchase intent has nowhere to land on first contact.' },
+                        { area: 'SEO', finding: 'Core Web Vitals flagged — LCP above the 4s threshold, which is suppressing organic rankings.' },
+                      ].map(({ area, finding }) => (
+                        <div key={area} className="flex gap-2.5">
+                          <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#F0EDE8] flex items-center justify-center mt-0.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#9C9690]" />
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-[#2D4A6E] mb-0.5">{area}</div>
+                            <p className="text-[11px] text-[#1A1918] leading-relaxed">{finding}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-5 py-3 bg-[#F4F2EF] border-t border-[#E8E4DC] flex items-center justify-between">
+                      <span className="text-[10px] text-[#6B6560]">Full report includes priority actions + quick wins</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
           </div>
         )}
