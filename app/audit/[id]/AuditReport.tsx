@@ -36,12 +36,6 @@ function scoreBg(s: number) {
   return 'bg-red-50 border-red-200'
 }
 
-function scoreLabel(s: number) {
-  if (s >= 80) return 'Strong'
-  if (s >= 65) return 'Average'
-  if (s >= 50) return 'Below Average'
-  return 'Needs Work'
-}
 
 function dimColor(s: number) {
   if (s >= 7) return 'bg-emerald-500'
@@ -723,9 +717,6 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
               <div className="px-6 py-6 flex items-center justify-between gap-6">
                 <div>
                   <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
-                  <div className={`text-lg mt-1 ${scoreColor(compositeScore)}`}>
-                    {scoreLabel(compositeScore)}
-                  </div>
                 </div>
                 <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
                   <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
@@ -766,9 +757,6 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
                   <div className="px-6 py-6 flex items-center justify-between gap-6">
                     <div>
                       <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
-                      <div className={`text-lg mt-1 ${scoreColor(compositeScore)}`}>
-                        {scoreLabel(compositeScore)}
-                      </div>
                     </div>
                     <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
                       <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>

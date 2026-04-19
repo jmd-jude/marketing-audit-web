@@ -23,13 +23,6 @@ function scoreColor(score: number) {
   return 'text-red-700'
 }
 
-function scoreLabel(score: number) {
-  if (score >= 80) return 'Strong'
-  if (score >= 65) return 'Average'
-  if (score >= 50) return 'Below Average'
-  if (score >= 35) return 'Weak'
-  return 'Critical'
-}
 
 function ScoreRing({ score, size = 96 }: { score: number | null; size?: number }) {
   const r = (size / 2) - 6
@@ -79,6 +72,10 @@ export default function Home() {
   const [dataCompetitive, setDataCompetitive] = useState(false)
   const [hasPageSpeed, setHasPageSpeed] = useState(false)
   const [pagesAnalyzed, setPagesAnalyzed] = useState<Array<{ url: string; status: string }>>([])
+  const [auditId, setAuditId] = useState<string | null>(null)
+  const [gateEmail, setGateEmail] = useState('')
+  const [gateSubmitting, setGateSubmitting] = useState(false)
+  const [gateSubmitted, setGateSubmitted] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -102,6 +99,10 @@ export default function Home() {
     setDataCompetitive(false)
     setHasPageSpeed(false)
     setPagesAnalyzed([])
+    setAuditId(null)
+    setGateEmail('')
+    setGateSubmitting(false)
+    setGateSubmitted(false)
     abortRef.current = new AbortController()
 
     try {
@@ -155,6 +156,7 @@ export default function Home() {
             }
             if (event.type === 'complete') {
               setCompositeScore(event.compositeScore)
+              if (event.auditId) setAuditId(event.auditId)
               setPhase('done')
               setStatusMsg('Analysis complete')
               if (!savedCode && inviteCode.trim()) {
@@ -192,6 +194,10 @@ export default function Home() {
     setDataCompetitive(false)
     setHasPageSpeed(false)
     setPagesAnalyzed([])
+    setAuditId(null)
+    setGateEmail('')
+    setGateSubmitting(false)
+    setGateSubmitted(false)
   }
 
   const targetUrl = url.startsWith('http') ? url : `https://${url}`
@@ -424,9 +430,6 @@ export default function Home() {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-display text-[#1A1918] text-xl mb-1.5">
-                  {scoreLabel(compositeScore)} — {compositeScore}/100
-                </div>
                 {summaryResult?.overall_verdict && (
                   <p className="text-sm text-[#6B6560] leading-relaxed">{summaryResult.overall_verdict}</p>
                 )}
@@ -457,11 +460,62 @@ export default function Home() {
             )}
 
             {/* Teaser close */}
-            <div className="bg-[#F0F4FA] border border-[#BFCFE8] rounded-xl px-6 py-5">
-              <div className="text-sm font-semibold text-[#1A1918] mb-1.5">Your full report is ready.</div>
-              <p className="text-sm text-[#4A5A72] leading-relaxed">
-                The score and findings above come from a complete analysis across five dimensions. The full report has the specific recommendations, priority actions, and quick wins for each one. Expect it from us shortly.
-              </p>
+            <div className="bg-[#2D4A6E] rounded-xl px-6 py-6">
+              {gateSubmitted ? (
+                <div className="text-center space-y-1">
+                  <div className="text-white font-semibold text-sm">You&apos;re on the list.</div>
+                  <p className="text-[#A8C0D8] text-sm">We&apos;ll send the full report to <span className="text-white font-medium">{gateEmail}</span> shortly.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-white font-semibold text-sm mb-1">Get the full report</div>
+                    <p className="text-[#A8C0D8] text-sm leading-relaxed">
+                      Specific recommendations, priority actions, and quick wins for each dimension. We&apos;ll send it to you.
+                    </p>
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      if (!gateEmail.trim() || !auditId) return
+                      setGateSubmitting(true)
+                      try {
+                        await fetch('/api/gate', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            email: gateEmail.trim(),
+                            auditId,
+                            url: targetUrl,
+                            auditor: name || undefined,
+                          }),
+                        })
+                        setGateSubmitted(true)
+                      } finally {
+                        setGateSubmitting(false)
+                      }
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="email"
+                      value={gateEmail}
+                      onChange={(e) => setGateEmail(e.target.value)}
+                      placeholder="Your email address"
+                      required
+                      className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-white text-[#1A1918] placeholder-[#C4BFB8] outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={gateSubmitting || !gateEmail.trim()}
+                      className="bg-white text-[#2D4A6E] font-semibold text-sm px-4 py-2.5 rounded-lg hover:bg-[#F0EDE8] transition-colors disabled:opacity-60 whitespace-nowrap"
+                    >
+                      {gateSubmitting ? 'Sending…' : 'Send my report'}
+                    </button>
+                  </form>
+                  <p className="text-[#7A9AB8] text-xs">No spam. Just your report.</p>
+                </div>
+              )}
             </div>
 
             <DataSourcesPanel

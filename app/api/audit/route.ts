@@ -732,7 +732,7 @@ export async function GET(request: Request) {
       const interiorPageCount = fetchedInteriorPages.length
       send({
         type: 'fetched',
-        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${interiorPageCount > 0 ? ` + ${interiorPageCount} interior page${interiorPageCount > 1 ? 's' : ''} ✓` : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}${isCompetitive ? ' + DataForSEO ✓' : ''}. Launching 5 parallel agents...`,
+        message: `Page fetched${pageSpeed ? ' + PageSpeed ✓' : ''}${crawlData ? ' + robots/sitemap ✓' : ''}${interiorPageCount > 0 ? ` + ${interiorPageCount} interior page${interiorPageCount > 1 ? 's' : ''} ✓` : ''}${isConnected ? ' + GSC/GA4 ✓' : ''}${isCompetitive ? ' + Intel APIs ✓' : ''}. Building your datalytics...`,
         pageSpeed,
         metadata: pageMetadata,
         connected: isConnected,
