@@ -631,13 +631,12 @@ function renderInspector(data) {
                 <span>${esc(data.auditor || '—')}</span>
                 ${data.model ? `<span class="tag">${data.model.replace('claude-','').replace(/-\d{8}$/,'')}</span>` : ''}
                 ${data.durationMs ? `<span>${fmtMs(data.durationMs)}</span>` : ''}
-                ${data.connected ? `<span class="tag connected">Connected</span>` : ''}
-                <span class="tag internal">Internal View</span>
+                
             </div>
         </div>
         <div class="run-score-block">
             <div class="run-score ${scoreClass(data.compositeScore)}">${data.compositeScore}</div>
-            <div class="run-score-label">Composite</div>
+            <div class="run-score-label">Composite Score</div>
         </div>
     </div>`;
 
@@ -651,6 +650,9 @@ function renderInspector(data) {
     const dfComps    = compAgent  && detectSignals(compAgent.userMessage).competitors;
     const techAgent  = (data.agents||[]).find(a=>a.key==='technical');
     const psPresent  = techAgent  && detectSignals(techAgent.userMessage).pagespeed;
+    const techMsg    = techAgent?.userMessage || '';
+    const robotsPresent  = techMsg.includes('## robots.txt');
+    const sitemapPresent = techMsg.includes('## sitemap.xml');
 
     function richnessItem(cls, name, detail) {
         return `<div class="richness-item ${cls}"><div class="richness-name">${name}</div><div class="richness-detail">${detail}</div></div>`;
@@ -665,7 +667,13 @@ function renderInspector(data) {
             <div class="richness-grid">
                 ${richnessItem('present', 'Homepage HTML', 'Always fetched · 15k char limit')}
                 ${richnessItem(psPresent ? 'present' : 'absent', 'PageSpeed / CWV', psPresent ? 'Lighthouse scores injected' : 'Not detected in brief')}
-                ${richnessItem('partial', 'robots.txt / sitemap', 'Attempted every run')}
+                ${richnessItem(
+                    (robotsPresent || sitemapPresent) ? 'present' : 'absent',
+                    'robots.txt / sitemap',
+                    robotsPresent && sitemapPresent ? 'Both fetched' :
+                    robotsPresent ? 'robots.txt only' :
+                    sitemapPresent ? 'sitemap only' : 'Neither fetched'
+                )}
                 ${richnessItem(gscPresent ? 'present' : 'absent', 'Search Console', gscPresent ? `${(data.gscContext.length/1000).toFixed(1)}k chars` : 'Not connected')}
                 ${richnessItem(ga4Present ? 'present' : 'absent', 'Google Analytics 4', ga4Present ? `${(data.ga4Context.length/1000).toFixed(1)}k chars` : 'Not connected')}
                 ${richnessItem(dfRank ? 'present' : 'absent', 'DataForSEO Rank', dfRank ? 'Domain rank context injected' : 'Not detected in brief')}
@@ -756,7 +764,7 @@ function renderInspector(data) {
     const agentCardsHtml = `
     <div class="card">
         <div class="card-header">
-            <div class="card-title">Agent Inspection — Brief · Output · JSON per agent</div>
+            <div class="card-title">Agent Inspection — Data In · Raw Output · JSON · Formatted</div>
             <div style="font-size:0.72rem;color:var(--muted)">click to expand</div>
         </div>
         <div class="card-body" style="padding:0">
@@ -815,9 +823,6 @@ function renderInspector(data) {
                             </div>
                             <div class="tab-panel active" data-tab="jd" data-card="${cardId}">
                                 ${ag.systemPrompt ? `
-                                <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.65rem">
-                                    System prompt as recorded at audit time. Edit in <code style="font-family:var(--mono);background:var(--tag-bg);padding:0.1rem 0.3rem;border-radius:3px">lib/agents.ts</code> to change future runs.
-                                </div>
                                 <div class="sysprompt-md">${marked.parse(ag.systemPrompt)}</div>
                                 ` : `
                                 <div style="font-size:0.82rem;color:var(--muted);padding:0.5rem 0">
@@ -837,7 +842,7 @@ function renderInspector(data) {
         <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
             <span class="collapsible-label">Summary Agent Output</span>
             <div class="collapsible-meta">
-                ${data.summaryTokens ? `<span>${fmt(data.summaryTokens.input)} in · ${fmt(data.summaryTokens.output)} out</span>` : ''}
+                
                 <span class="chevron">▼</span>
             </div>
         </div>
