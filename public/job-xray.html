@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job X-Ray — Internal</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #F0F2F5;
+            --fg: #1C1E21;
+            --muted: #606770;
+            --border: #CDD1D8;
+            --card: #FFFFFF;
+            --card-border: #DDE1E7;
+            --accent: #1877F2;
+            --accent-bg: #E7F0FF;
+            --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            --score-high: #15803D;
+            --score-mid: #B45309;
+            --score-low: #B91C1C;
+            --present: #D1FAE5;
+            --present-text: #065F46;
+            --absent: #FEE2E2;
+            --absent-text: #991B1B;
+            --partial: #FEF3C7;
+            --partial-text: #92400E;
+            --tag-bg: #EAECF0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        /* ── Load screen ─────────────────────────────── */
+        .load-badge {
+            display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; padding: 0.15rem 0.5rem; border-radius: 4px;
+            background: var(--absent); color: var(--absent-text); margin-left: 0.5rem; vertical-align: middle;
+        }
+
+        /* ── Nav bar ─────────────────────────────────── */
+        .nav-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--card); border: 1px solid var(--card-border); border-radius: 10px;
+            padding: 0.65rem 1rem; margin-bottom: 1rem;
+        }
+        .nav-count { font-size: 0.8rem; color: var(--muted); }
+        .nav-controls { display: flex; gap: 0.4rem; align-items: center; }
+        .nav-btn {
+            background: none; border: 1px solid var(--border); border-radius: 5px;
+            padding: 0.25rem 0.7rem; font-size: 0.8rem; cursor: pointer; color: var(--fg);
+        }
+        .nav-btn:hover:not(:disabled) { background: var(--tag-bg); }
+        .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .nav-index { font-size: 0.8rem; font-weight: 600; min-width: 3.5rem; text-align: center; }
+        .nav-right { display: flex; gap: 0.75rem; align-items: center; }
+        .reload-link { font-size: 0.75rem; color: var(--muted); cursor: pointer; text-decoration: underline; background: none; border: none; }
+        .reload-link:hover { color: var(--fg); }
+
+        /* ── Cards / sections ────────────────────────── */
+        .card {
+            background: var(--card); border: 1px solid var(--card-border);
+            border-radius: 10px; overflow: hidden; margin-bottom: 1rem;
+        }
+        .card-header {
+            padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--card-border);
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem;
+        }
+        .card-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+        .card-body { padding: 1rem 1.1rem; }
+
+        /* ── Run header ──────────────────────────────── */
+        .run-header {
+            background: var(--card); border: 1px solid var(--card-border); border-radius: 10px;
+            padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+        }
+        .run-url { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 0.35rem; word-break: break-all; }
+        .run-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.77rem; color: var(--muted); }
+        .tag {
+            font-size: 0.67rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px;
+            background: var(--tag-bg); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .tag.connected { background: var(--present); color: var(--present-text); }
+        .tag.internal { background: var(--absent); color: var(--absent-text); }
+        .run-score-block { text-align: right; flex-shrink: 0; }
+        .run-score { font-size: 2.75rem; font-weight: 900; line-height: 1; }
+        .run-score-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-top: 0.15rem; }
+
+        /* ── Data richness grid ──────────────────────── */
+        .richness-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; }
+        .richness-item { border-radius: 7px; padding: 0.65rem 0.75rem; border: 1px solid; }
+        .richness-item.present { background: var(--present); border-color: #A7F3D0; }
+        .richness-item.absent { background: var(--absent); border-color: #FECACA; }
+        .richness-item.partial { background: var(--partial); border-color: #FDE68A; }
+        .richness-name { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
+        .richness-item.present .richness-name { color: var(--present-text); }
+        .richness-item.absent .richness-name { color: var(--absent-text); }
+        .richness-item.partial .richness-name { color: var(--partial-text); }
+        .richness-detail { font-size: 0.72rem; color: var(--muted); }
+        .richness-item.present .richness-detail { color: #047857; }
+        .richness-item.absent .richness-detail { color: #B91C1C; }
+        .richness-item.partial .richness-detail { color: var(--partial-text); }
+
+        /* ── Pages analyzed table ────────────────────── */
+        .pages-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+        .pages-table th {
+            text-align: left; font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--muted); padding: 0.35rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .pages-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--card-border); font-family: var(--mono); }
+        .pages-table tr:last-child td { border-bottom: none; }
+        .status-pill {
+            font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .status-fetched { background: var(--present); color: var(--present-text); }
+        .status-timeout, .status-error { background: var(--absent); color: var(--absent-text); }
+        .status-skipped { background: var(--tag-bg); color: var(--muted); }
+
+        /* ── Context raw blocks ──────────────────────── */
+        .context-block {
+            background: #F8F9FA; border: 1px solid var(--border); border-radius: 6px;
+            padding: 0.75rem; margin-bottom: 0.75rem;
+        }
+        .context-block:last-child { margin-bottom: 0; }
+        .context-label {
+            font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--muted); margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;
+        }
+        .context-chars { font-size: 0.67rem; color: var(--muted); font-weight: 400; }
+        .context-pre {
+            font-family: var(--mono); font-size: 0.72rem; white-space: pre-wrap; word-break: break-word;
+            color: var(--fg); line-height: 1.55; max-height: 280px; overflow-y: auto;
+        }
+        .collapsible-toggle {
+            cursor: pointer; user-select: none;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--card-border);
+        }
+        .collapsible-toggle:hover { background: var(--bg); }
+        .collapsible-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        .collapsible-meta { font-size: 0.72rem; color: var(--muted); display: flex; gap: 0.75rem; align-items: center; }
+        .chevron { font-size: 0.65rem; color: var(--muted); transition: transform 0.15s; }
+        .open > .chevron, .collapsible-open .chevron { transform: rotate(180deg); }
+        .collapsible-body { display: none; padding: 1rem 1.1rem; border-bottom: 1px solid var(--card-border); }
+        .collapsible-body.visible { display: block; }
+
+        /* ── Agent cards ─────────────────────────────── */
+        .agent-cards { display: flex; flex-direction: column; gap: 0.75rem; }
+        .agent-card { border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; background: var(--card); }
+        .agent-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.75rem 1rem; cursor: pointer; user-select: none;
+            background: var(--tag-bg); transition: background 0.1s;
+        }
+        .agent-card-header:hover { background: var(--border); }
+        .agent-card-left { display: flex; flex-direction: column; gap: 0.15rem; }
+        .agent-card-name { font-size: 0.82rem; font-weight: 700; }
+        .agent-card-meta { font-size: 0.7rem; color: var(--muted); }
+        .agent-card-right { display: flex; align-items: center; gap: 0.75rem; }
+        .agent-card-score { font-size: 1.1rem; font-weight: 900; }
+        .agent-card-body { display: none; }
+        .agent-card.open .agent-card-body { display: block; }
+
+        /* ── Tabs inside agent card ───────────────────── */
+        .tab-bar { display: flex; border-bottom: 1px solid var(--card-border); background: #FAFBFC; }
+        .tab-btn {
+            padding: 0.55rem 1rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+            border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent;
+            transition: color 0.1s, border-color 0.1s; user-select: none;
+        }
+        .tab-btn:hover { color: var(--fg); }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-panel { display: none; padding: 1rem 1.1rem; }
+        .tab-panel.active { display: block; }
+
+        /* ── Brief tab ────────────────────────────────── */
+        .brief-stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+        .brief-stat { font-size: 0.72rem; }
+        .brief-stat-label { color: var(--muted); }
+        .brief-stat-val { font-weight: 700; color: var(--fg); }
+        .brief-signals { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; }
+        .signal-pill {
+            font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 4px;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .signal-pill.on { background: var(--present); color: var(--present-text); }
+        .signal-pill.off { background: var(--absent); color: var(--absent-text); }
+        .brief-pre {
+            font-family: var(--mono); font-size: 0.71rem; white-space: pre-wrap; word-break: break-word;
+            color: var(--fg); line-height: 1.6; background: #F8F9FA; border: 1px solid var(--border);
+            border-radius: 6px; padding: 0.75rem; max-height: 500px; overflow-y: auto;
+        }
+
+        /* ── Output tab ───────────────────────────────── */
+        .dim-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+        .dim-row { display: flex; align-items: center; gap: 0.75rem; font-size: 0.79rem; }
+        .dim-name { width: 10rem; flex-shrink: 0; font-weight: 500; }
+        .dim-bar-wrap { flex: 1; background: #EAECF0; border-radius: 99px; height: 5px; }
+        .dim-bar { height: 5px; border-radius: 99px; }
+        .dim-bar.high { background: var(--score-high); }
+        .dim-bar.mid { background: var(--score-mid); }
+        .dim-bar.low { background: var(--score-low); }
+        .dim-score { width: 2.5rem; text-align: right; font-weight: 700; font-size: 0.77rem; flex-shrink: 0; }
+        .dim-finding { font-size: 0.74rem; color: var(--muted); line-height: 1.5; margin-top: 0.1rem; padding-left: 10.75rem; margin-bottom: 0.15rem; }
+
+        .out-section { margin-bottom: 1rem; }
+        .out-section:last-child { margin-bottom: 0; }
+        .out-label { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.45rem; }
+        .item-list { display: flex; flex-direction: column; gap: 0.3rem; }
+        .item { font-size: 0.79rem; color: var(--fg); line-height: 1.5; padding-left: 1rem; position: relative; }
+        .item.win::before { content: '+'; position: absolute; left: 0; color: var(--score-high); font-weight: 700; }
+        .item.fix::before { content: '!'; position: absolute; left: 0; color: var(--score-low); font-weight: 700; }
+        .item.bullet::before { content: '·'; position: absolute; left: 0.1rem; color: var(--muted); font-weight: 700; }
+
+        .lever-box {
+            background: var(--accent-bg); border: 1px solid #BFCFE8; border-radius: 6px;
+            padding: 0.7rem 0.85rem; font-size: 0.82rem; color: var(--fg); line-height: 1.6;
+        }
+
+        .sev {
+            display: inline-block; font-size: 0.62rem; font-weight: 700; padding: 0.1rem 0.35rem;
+            border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+        }
+        .sev.critical { background: #FEE2E2; color: #991B1B; }
+        .sev.high { background: #FEF3C7; color: #92400E; }
+        .sev.medium { background: #E0F2FE; color: #0C4A6E; }
+        .sev.low { background: #F0FDF4; color: #166534; }
+
+        .issue-item, .leak-item { background: var(--bg); border-radius: 6px; padding: 0.55rem 0.7rem; margin-bottom: 0.5rem; }
+        .issue-item:last-child, .leak-item:last-child { margin-bottom: 0; }
+        .issue-header { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.25rem; }
+        .issue-name { font-size: 0.79rem; font-weight: 600; }
+        .issue-impact { font-size: 0.74rem; color: var(--muted); line-height: 1.45; margin-bottom: 0.2rem; }
+        .issue-fix { font-size: 0.74rem; color: var(--fg); line-height: 1.45; }
+        .issue-fix::before { content: '→ '; color: var(--score-high); font-weight: 700; }
+
+        .tracking-row { display: flex; align-items: baseline; gap: 0.55rem; font-size: 0.78rem; margin-bottom: 0.3rem; }
+        .tracking-tool { width: 8rem; flex-shrink: 0; font-weight: 500; }
+        .tracking-present { font-size: 0.67rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px; flex-shrink: 0; }
+        .tracking-present.yes { background: var(--present); color: var(--present-text); }
+        .tracking-present.no { background: var(--absent); color: var(--absent-text); }
+        .tracking-notes { font-size: 0.73rem; color: var(--muted); }
+
+        .ps-pills { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45rem; margin-bottom: 0.65rem; }
+        .ps-pill { text-align: center; border-radius: 6px; border: 1px solid; padding: 0.4rem 0.25rem; }
+        .ps-pill.high { background: #F0FDF4; border-color: #BBF7D0; }
+        .ps-pill.mid { background: #FFFBEB; border-color: #FDE68A; }
+        .ps-pill.low { background: #FEF2F2; border-color: #FECACA; }
+        .ps-val { font-size: 1rem; font-weight: 800; }
+        .ps-lbl { font-size: 0.6rem; color: var(--muted); margin-top: 0.1rem; }
+        .cwv-row { display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.74rem; color: var(--muted); }
+        .cwv-row span strong { color: var(--fg); }
+
+        .comp-item { background: var(--bg); border-radius: 6px; padding: 0.55rem 0.7rem; margin-bottom: 0.5rem; }
+        .comp-name { font-size: 0.8rem; font-weight: 700; margin-bottom: 0.3rem; }
+        .comp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.74rem; }
+        .comp-col-label { font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
+        .comp-col-label.str { color: var(--score-high); }
+        .comp-col-label.wk { color: var(--score-low); }
+
+        /* ── JSON tab ─────────────────────────────────── */
+        .json-pre {
+            font-family: var(--mono); font-size: 0.7rem; white-space: pre-wrap; word-break: break-word;
+            color: var(--fg); line-height: 1.55; background: #F8F9FA; border: 1px solid var(--border);
+            border-radius: 6px; padding: 0.75rem; max-height: 500px; overflow-y: auto;
+        }
+        .json-key   { color: #1877F2; font-weight: 600; }
+        .json-str   { color: #15803D; }
+        .json-num   { color: #B45309; }
+        .json-bool  { color: #7C3AED; font-weight: 600; }
+        .json-null  { color: #9CA3AF; font-style: italic; }
+
+        /* ── System prompt tab ────────────────────────── */
+        .sysprompt-md { font-size: 0.78rem; line-height: 1.7; color: var(--fg); }
+        .sysprompt-md h1, .sysprompt-md h2 { font-size: 0.82rem; font-weight: 700; margin: 1rem 0 0.35rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
+        .sysprompt-md h3 { font-size: 0.76rem; font-weight: 700; margin: 0.75rem 0 0.25rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .sysprompt-md h1:first-child, .sysprompt-md h2:first-child { margin-top: 0; }
+        .sysprompt-md strong { font-weight: 700; }
+        .sysprompt-md ul, .sysprompt-md ol { padding-left: 1.25rem; margin: 0.35rem 0 0.6rem; }
+        .sysprompt-md li { margin-bottom: 0.2rem; }
+        .sysprompt-md p { margin-bottom: 0.45rem; }
+        .sysprompt-md code { font-family: var(--mono); font-size: 0.72rem; background: var(--tag-bg); padding: 0.1rem 0.3rem; border-radius: 3px; }
+        .sysprompt-md pre { background: #F8F9FA; border: 1px solid var(--border); border-radius: 5px; padding: 0.6rem 0.75rem; margin: 0.4rem 0; overflow-x: auto; }
+        .sysprompt-md pre code { background: none; padding: 0; }
+
+        /* ── Summary section ─────────────────────────── */
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .verdict-text { font-size: 0.85rem; line-height: 1.65; }
+        .priority-item { display: flex; gap: 0.65rem; margin-bottom: 0.85rem; }
+        .priority-item:last-child { margin-bottom: 0; }
+        .priority-rank {
+            flex-shrink: 0; width: 1.4rem; height: 1.4rem; border-radius: 50%;
+            background: var(--tag-bg); display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem; font-weight: 700; color: var(--muted); margin-top: 0.1rem;
+        }
+        .priority-area { font-size: 0.82rem; font-weight: 700; margin-bottom: 0.15rem; }
+        .priority-finding { font-size: 0.8rem; color: var(--fg); line-height: 1.5; margin-bottom: 0.2rem; }
+        .priority-action { font-size: 0.76rem; background: var(--tag-bg); border-radius: 5px; padding: 0.35rem 0.55rem; line-height: 1.5; }
+
+        /* ── Run stats ────────────────────────────────── */
+        .stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+        .stat-val { font-size: 0.9rem; font-weight: 700; }
+
+        /* ── Score colors ─────────────────────────────── */
+        .score-high { color: var(--score-high); }
+        .score-mid { color: var(--score-mid); }
+        .score-low { color: var(--score-low); }
+
+        /* ── Rendered markdown (context blocks) ─────── */
+        .context-md { font-size: 0.78rem; line-height: 1.65; color: var(--fg); }
+        .context-md h2 { font-size: 0.82rem; font-weight: 700; margin: 0.9rem 0 0.35rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
+        .context-md h3 { font-size: 0.76rem; font-weight: 700; margin: 0.75rem 0 0.3rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .context-md h2:first-child, .context-md h3:first-child { margin-top: 0; }
+        .context-md strong { font-weight: 700; color: var(--fg); }
+        .context-md p { margin-bottom: 0.4rem; }
+        .context-md table { width: 100%; border-collapse: collapse; margin: 0.4rem 0 0.75rem; font-family: var(--mono); font-size: 0.71rem; }
+        .context-md th { text-align: left; font-weight: 700; padding: 0.25rem 0.5rem; border-bottom: 2px solid var(--border); color: var(--muted); font-family: inherit; }
+        .context-md td { padding: 0.22rem 0.5rem; border-bottom: 1px solid var(--card-border); vertical-align: top; }
+        .context-md tr:last-child td { border-bottom: none; }
+        .context-md tr:nth-child(even) { background: var(--bg); }
+
+        @media (max-width: 640px) {
+            .summary-grid { grid-template-columns: 1fr; }
+            .ps-pills { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+</head>
+<body>
+<div class="container">
+
+    <!-- Loading / error state -->
+    <div id="load-screen" style="text-align:center;padding:4rem 0">
+        <div style="font-size:0.85rem;color:var(--muted)" id="load-status">Loading audits…</div>
+    </div>
+
+    <!-- Main view -->
+    <div id="main" style="display:none;">
+
+        <div class="nav-bar">
+            <div class="nav-count" id="nav-count"></div>
+            <div class="nav-controls">
+                <button class="nav-btn" id="btn-first">«</button>
+                <button class="nav-btn" id="btn-prev">‹</button>
+                <span class="nav-index" id="nav-index"></span>
+                <button class="nav-btn" id="btn-next">›</button>
+                <button class="nav-btn" id="btn-last">»</button>
+            </div>
+            <div class="nav-right">
+                <button class="reload-link" id="btn-reload">↻ refresh</button>
+            </div>
+        </div>
+
+        <div id="inspector"></div>
+
+    </div>
+</div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+let entries = [], current = 0;
+const pageKey = new URLSearchParams(window.location.search).get('key') || '';
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmt(n) { if (n == null) return '—'; return n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n); }
+function fmtMs(ms) { return ms ? (ms/1000).toFixed(1)+'s' : '—'; }
+function scoreClass(s) { return s >= 70 ? 'score-high' : s >= 40 ? 'score-mid' : 'score-low'; }
+function dimClass(s) { return s >= 7 ? 'high' : s >= 4 ? 'mid' : 'low'; }
+function sevClass(s) { return (s||'').toLowerCase(); }
+function approxTokens(str) { return str ? Math.round(str.length / 4) : 0; }
+
+function highlightJson(obj) {
+    const raw = JSON.stringify(obj, null, 2)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return raw.replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        m => {
+            if (/^"/.test(m)) return /:$/.test(m) ? `<span class="json-key">${m}</span>` : `<span class="json-str">${m}</span>`;
+            if (/true|false/.test(m)) return `<span class="json-bool">${m}</span>`;
+            if (/null/.test(m)) return `<span class="json-null">${m}</span>`;
+            return `<span class="json-num">${m}</span>`;
+        }
+    );
+}
+
+// Detect which signals are present in a userMessage string
+function detectSignals(msg) {
+    if (!msg) return {};
+    const m = msg.toLowerCase();
+    return {
+        html:        msg.length > 200,
+        pagespeed:   m.includes('pagespeed') || m.includes('lighthouse') || m.includes('core web vitals'),
+        gsc:         m.includes('search console') || m.includes('gsc') || m.includes('impressions') || m.includes('clicks'),
+        ga4:         m.includes('google analytics') || m.includes('ga4') || m.includes('sessions') || m.includes('pageviews'),
+        dataforseo:  m.includes('dataforseo') || m.includes('domain rank') || m.includes('organic traffic') || m.includes('keyword count'),
+        competitors: m.includes('competitor') || m.includes('competing domain'),
+        interior:    m.includes('## interior page'),
+    };
+}
+
+// ── Data source labels ─────────────────────────────────────────────────────
+const AGENT_LABELS = {
+    content:     'Content & Messaging',
+    conversion:  'Conversion / CRO',
+    technical:   'SEO & Technical',
+    strategy:    'Brand & Growth Strategy',
+    competitive: 'Competitive Positioning',
+};
+
+// ── Output renderers ───────────────────────────────────────────────────────
+function renderDims(dims) {
+    if (!Array.isArray(dims) || !dims.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Dimensions</div>
+        <div class="dim-list">${dims.map(d => `
+            <div>
+                <div class="dim-row">
+                    <span class="dim-name">${esc(d.name)}</span>
+                    <div class="dim-bar-wrap"><div class="dim-bar ${dimClass(d.score)}" style="width:${d.score*10}%"></div></div>
+                    <span class="dim-score ${scoreClass(d.score)}">${d.score}/10</span>
+                </div>
+                ${d.finding ? `<div class="dim-finding">${esc(d.finding)}</div>` : ''}
+            </div>`).join('')}
+        </div>
+    </div>`;
+}
+
+function renderList(items, cls, label) {
+    if (!Array.isArray(items) || !items.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">${label}</div>
+        <div class="item-list">${items.map(i => `<div class="item ${cls}">${esc(i)}</div>`).join('')}</div>
+    </div>`;
+}
+
+function renderPagespeed(ps) {
+    if (!ps) return '';
+    function pc(v) { return v >= 90 ? 'high' : v >= 50 ? 'mid' : 'low'; }
+    const pills = [['Performance',ps.performance],['Accessibility',ps.accessibility],['SEO',ps.seo],['Best Practices',ps.best_practices]]
+        .map(([l,v]) => `<div class="ps-pill ${pc(v)}"><div class="ps-val ${scoreClass(v)}">${v}</div><div class="ps-lbl">${l}</div></div>`).join('');
+    const cwv = [['LCP',ps.lcp],['CLS',ps.cls],['TBT',ps.tbt],['FCP',ps.fcp]]
+        .filter(([,v])=>v).map(([k,v])=>`<span><strong>${k}</strong> ${esc(v)}</span>`).join('');
+    return `<div class="out-section">
+        <div class="out-label">PageSpeed</div>
+        <div class="ps-pills">${pills}</div>
+        ${cwv ? `<div class="cwv-row">${cwv}</div>` : ''}
+    </div>`;
+}
+
+function renderIssues(issues) {
+    if (!Array.isArray(issues) || !issues.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Technical Issues</div>
+        ${issues.map(i => `<div class="issue-item">
+            <div class="issue-header">
+                <span class="sev ${sevClass(i.severity)}">${esc(i.severity)}</span>
+                <span class="issue-name">${esc(i.issue)}</span>
+            </div>
+            ${i.impact ? `<div class="issue-impact">${esc(i.impact)}</div>` : ''}
+            ${i.fix ? `<div class="issue-fix">${esc(i.fix)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderTracking(tracking) {
+    if (!Array.isArray(tracking) || !tracking.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Tracking Status</div>
+        ${tracking.map(t => `<div class="tracking-row">
+            <span class="tracking-tool">${esc(t.tool)}</span>
+            <span class="tracking-present ${t.present ? 'yes' : 'no'}">${t.present ? 'YES' : 'NO'}</span>
+            ${t.notes ? `<span class="tracking-notes">${esc(t.notes)}</span>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderFunnelLeaks(leaks) {
+    if (!Array.isArray(leaks) || !leaks.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Funnel Leaks</div>
+        ${leaks.map(l => `<div class="leak-item">
+            <div class="issue-header">
+                <span class="sev ${sevClass(l.severity)}">${esc(l.severity)}</span>
+                <span class="issue-name">${esc(l.stage)}</span>
+            </div>
+            <div class="issue-impact">${esc(l.issue)}</div>
+            ${l.fix ? `<div class="issue-fix">${esc(l.fix)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderCompetitors(comps) {
+    if (!Array.isArray(comps) || !comps.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Competitors Identified</div>
+        ${comps.map(c => `<div class="comp-item">
+            <div class="comp-name">${esc(c.name)}</div>
+            <div class="comp-cols">
+                <div><div class="comp-col-label str">Strength</div><div style="font-size:0.74rem">${esc(c.strength)}</div></div>
+                <div><div class="comp-col-label wk">Weakness</div><div style="font-size:0.74rem">${esc(c.weakness)}</div></div>
+            </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderOpps(opps) {
+    if (!Array.isArray(opps) || !opps.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Opportunities</div>
+        ${opps.map(o => `<div class="issue-item">
+            <div class="issue-name" style="font-size:0.8rem;margin-bottom:0.2rem">${esc(o.title)}</div>
+            <div class="issue-impact">${esc(o.description)}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderBeforeAfter(items) {
+    if (!Array.isArray(items) || !items.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">Copy Rewrites</div>
+        ${items.map(ba => `<div class="issue-item">
+            <div class="issue-name" style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.4rem">${esc(ba.element)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.76rem">
+                <div><div style="font-size:0.63rem;font-weight:700;text-transform:uppercase;color:#B91C1C;margin-bottom:0.2rem">Before</div>${esc(ba.before)}</div>
+                <div><div style="font-size:0.63rem;font-weight:700;text-transform:uppercase;color:#15803D;margin-bottom:0.2rem">After</div>${esc(ba.after)}</div>
+            </div>
+            ${ba.why ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:0.35rem;font-style:italic">${esc(ba.why)}</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderAbTests(tests) {
+    if (!Array.isArray(tests) || !tests.length) return '';
+    return `<div class="out-section">
+        <div class="out-label">A/B Test Ideas</div>
+        ${tests.map(t => `<div class="issue-item">
+            <div style="font-size:0.78rem;color:var(--fg);line-height:1.5;margin-bottom:0.25rem;font-style:italic">${esc(t.hypothesis)}</div>
+            <div style="font-size:0.72rem;color:var(--muted)">
+                <strong>Metric:</strong> ${esc(t.metric)}
+                ${t.impact ? ` · <strong>Impact:</strong> ${esc(t.impact)}` : ''}
+            </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderRevenue(rev) {
+    if (!rev) return '';
+    function tier(items, label) {
+        if (!Array.isArray(items) || !items.length) return '';
+        return `<div style="margin-bottom:0.65rem">
+            <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:0.3rem;border-bottom:1px solid var(--card-border);padding-bottom:0.2rem">${label}</div>
+            ${items.map(i=>`<div style="display:flex;gap:0.5rem;font-size:0.77rem;margin-bottom:0.25rem;align-items:baseline">
+                <span style="font-size:0.63rem;font-weight:700;padding:0.1rem 0.35rem;border-radius:4px;background:var(--tag-bg);color:var(--muted);flex-shrink:0">${esc(i.effort)}</span>
+                <span>${esc(i.opportunity)}</span>
+                ${i.impact ? `<span style="font-size:0.7rem;color:var(--muted);flex-shrink:0">${esc(i.impact)}</span>` : ''}
+            </div>`).join('')}
+        </div>`;
+    }
+    const body = tier(rev.quick_wins,'Quick Wins') + tier(rev.medium_term,'Medium Term') + tier(rev.strategic,'Strategic');
+    return body ? `<div class="out-section"><div class="out-label">Revenue Opportunities</div>${body}</div>` : '';
+}
+
+function renderAgentOutput(ag) {
+    const r = ag.result || {};
+    let html = '';
+    html += renderDims(r.dimensions);
+    html += renderList(r.wins, 'win', 'Strengths');
+    html += renderList(r.critical_fixes, 'fix', 'Critical Fixes');
+    html += renderBeforeAfter(r.before_after);
+    html += renderList(r.quick_wins, 'bullet', 'Quick Wins');
+    html += renderFunnelLeaks(r.funnel_leaks);
+    html += renderAbTests(r.ab_tests);
+    html += renderPagespeed(r.pagespeed);
+    html += renderList(r.seo_quick_wins, 'bullet', 'SEO Quick Wins');
+    html += renderIssues(r.technical_issues);
+    html += renderTracking(r.tracking_status);
+    html += renderCompetitors(r.likely_competitors);
+    html += renderOpps(r.opportunities);
+    html += renderList(r.recommended_actions, 'bullet', 'Recommended Actions');
+    if (r.biggest_lever) html += `<div class="out-section"><div class="out-label">Biggest Lever</div><div class="lever-box">${esc(r.biggest_lever)}</div></div>`;
+    html += renderRevenue(r.revenue_opportunities);
+    if (r.brand_score != null || r.growth_score != null) {
+        html += `<div class="out-section"><div class="out-label">Brand &amp; Growth Scores</div>
+            <div style="display:flex;gap:1.5rem">
+                ${r.brand_score != null ? `<div style="text-align:center"><div style="font-size:1.4rem;font-weight:800" class="${scoreClass(r.brand_score)}">${r.brand_score}</div><div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">Brand</div></div>` : ''}
+                ${r.growth_score != null ? `<div style="text-align:center"><div style="font-size:1.4rem;font-weight:800" class="${scoreClass(r.growth_score)}">${r.growth_score}</div><div style="font-size:0.63rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">Growth</div></div>` : ''}
+            </div>
+        </div>`;
+    }
+    return html || '<div style="font-size:0.8rem;color:var(--muted)">No structured output.</div>';
+}
+
+// ── Main render ────────────────────────────────────────────────────────────
+function renderInspector(data) {
+    const date = new Date(data.timestamp).toLocaleString('en-US',{
+        month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'
+    });
+
+    const headerHtml = `
+    <div class="run-header">
+        <div>
+            <div class="run-url">${esc(data.url)}</div>
+            <div class="run-meta">
+                <span>${date}</span>
+                <span>${esc(data.auditor || '—')}</span>
+                ${data.model ? `<span class="tag">${data.model.replace('claude-','').replace(/-\d{8}$/,'')}</span>` : ''}
+                ${data.durationMs ? `<span>${fmtMs(data.durationMs)}</span>` : ''}
+                ${data.connected ? `<span class="tag connected">Connected</span>` : ''}
+                <span class="tag internal">Internal View</span>
+            </div>
+        </div>
+        <div class="run-score-block">
+            <div class="run-score ${scoreClass(data.compositeScore)}">${data.compositeScore}</div>
+            <div class="run-score-label">Composite</div>
+        </div>
+    </div>`;
+
+    const gscPresent = !!data.gscContext;
+    const ga4Present = !!data.ga4Context;
+    const hasPages = Array.isArray(data.pagesAnalyzed) && data.pagesAnalyzed.length > 0;
+    const pagesFetched = hasPages ? data.pagesAnalyzed.filter(p => p.status === 'fetched') : [];
+    const stratAgent = (data.agents||[]).find(a=>a.key==='strategy');
+    const compAgent  = (data.agents||[]).find(a=>a.key==='competitive');
+    const dfRank     = stratAgent && detectSignals(stratAgent.userMessage).dataforseo;
+    const dfComps    = compAgent  && detectSignals(compAgent.userMessage).competitors;
+    const techAgent  = (data.agents||[]).find(a=>a.key==='technical');
+    const psPresent  = techAgent  && detectSignals(techAgent.userMessage).pagespeed;
+
+    function richnessItem(cls, name, detail) {
+        return `<div class="richness-item ${cls}"><div class="richness-name">${name}</div><div class="richness-detail">${detail}</div></div>`;
+    }
+
+    const richnessHtml = `
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Data Sources — What the agents worked from</div>
+        </div>
+        <div class="card-body">
+            <div class="richness-grid">
+                ${richnessItem('present', 'Homepage HTML', 'Always fetched · 15k char limit')}
+                ${richnessItem(psPresent ? 'present' : 'absent', 'PageSpeed / CWV', psPresent ? 'Lighthouse scores injected' : 'Not detected in brief')}
+                ${richnessItem('partial', 'robots.txt / sitemap', 'Attempted every run')}
+                ${richnessItem(gscPresent ? 'present' : 'absent', 'Search Console', gscPresent ? `${(data.gscContext.length/1000).toFixed(1)}k chars` : 'Not connected')}
+                ${richnessItem(ga4Present ? 'present' : 'absent', 'Google Analytics 4', ga4Present ? `${(data.ga4Context.length/1000).toFixed(1)}k chars` : 'Not connected')}
+                ${richnessItem(dfRank ? 'present' : 'absent', 'DataForSEO Rank', dfRank ? 'Domain rank context injected' : 'Not detected in brief')}
+                ${richnessItem(dfComps ? 'present' : 'absent', 'DataForSEO Comps', dfComps ? 'Competitor context injected' : 'Not detected in brief')}
+                ${richnessItem(pagesFetched.length > 0 ? 'present' : 'absent', 'Interior Pages', pagesFetched.length > 0 ? `${pagesFetched.length} page${pagesFetched.length!==1?'s':''} fetched` : 'None fetched')}
+            </div>
+            ${hasPages ? `
+            <div style="margin-top:1rem">
+                <div class="out-label" style="margin-bottom:0.5rem">Interior Pages Detail</div>
+                <table class="pages-table">
+                    <thead><tr>
+                        <th>URL</th><th>Status</th><th>Chars</th><th>Agents Received</th>
+                    </tr></thead>
+                    <tbody>
+                        ${data.pagesAnalyzed.map(p=>`<tr>
+                            <td>${esc(p.url)}</td>
+                            <td><span class="status-pill status-${esc(p.status)}">${esc(p.status)}</span></td>
+                            <td>${p.chars ? (p.chars/1000).toFixed(1)+'k' : '—'}</td>
+                            <td style="font-family:inherit;font-size:0.75rem">${Array.isArray(p.agents) ? p.agents.join(', ') : '—'}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
+        </div>
+    </div>`;
+
+    const hasRawContext = gscPresent || ga4Present;
+    const rawContextHtml = hasRawContext ? `
+    <div class="card" style="overflow:visible">
+        <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
+            <span class="collapsible-label">Raw Context Strings — Full text injected into agent prompts</span>
+            <div class="collapsible-meta">
+                ${gscPresent ? `<span>GSC ${(data.gscContext.length/1000).toFixed(1)}k chars</span>` : ''}
+                ${ga4Present ? `<span>GA4 ${(data.ga4Context.length/1000).toFixed(1)}k chars</span>` : ''}
+                <span class="chevron">▼</span>
+            </div>
+        </div>
+        <div class="collapsible-body">
+            ${gscPresent ? `
+            <div class="context-block">
+                <div class="context-label">
+                    <span>Search Console Context</span>
+                    <span class="context-chars">${data.gscContext.length.toLocaleString()} chars · ~${approxTokens(data.gscContext).toLocaleString()} tokens</span>
+                </div>
+                <div class="context-md">${marked.parse(data.gscContext)}</div>
+            </div>` : ''}
+            ${ga4Present ? `
+            <div class="context-block">
+                <div class="context-label">
+                    <span>GA4 Context</span>
+                    <span class="context-chars">${data.ga4Context.length.toLocaleString()} chars · ~${approxTokens(data.ga4Context).toLocaleString()} tokens</span>
+                </div>
+                <div class="context-md">${marked.parse(data.ga4Context)}</div>
+            </div>` : ''}
+        </div>
+    </div>` : '';
+
+    const m = data.pageMetadata;
+    const metaHtml = m ? `
+    <div class="card">
+        <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
+            <span class="collapsible-label">Page Metadata — Extracted before HTML strip</span>
+            <div class="collapsible-meta">
+                ${m.title ? `<span>${esc(m.title.slice(0,40))}${m.title.length>40?'…':''}</span>` : ''}
+                ${m.wordCount ? `<span>~${m.wordCount.toLocaleString()} words</span>` : ''}
+                <span class="chevron">▼</span>
+            </div>
+        </div>
+        <div class="collapsible-body">
+            <div style="display:grid;grid-template-columns:7rem 1fr;gap:0.4rem;font-size:0.79rem">
+                ${m.title ? `<span style="color:var(--muted);font-weight:500">Title</span><span>${esc(m.title)}</span>` : ''}
+                ${m.metaDescription ? `<span style="color:var(--muted);font-weight:500">Meta Desc</span><span>${esc(m.metaDescription)}</span>` : ''}
+                ${m.h1s && m.h1s.length ? `<span style="color:var(--muted);font-weight:500">H1s</span><span>${m.h1s.map(esc).join(' / ')}</span>` : ''}
+                ${m.canonical ? `<span style="color:var(--muted);font-weight:500">Canonical</span><span style="font-family:var(--mono);font-size:0.73rem">${esc(m.canonical)}</span>` : ''}
+                ${m.wordCount ? `<span style="color:var(--muted);font-weight:500">Word count</span><span>~${m.wordCount.toLocaleString()}</span>` : ''}
+                ${m.metaRobots ? `<span style="color:var(--muted);font-weight:500">Robots</span><span>${esc(m.metaRobots)}</span>` : ''}
+            </div>
+            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.65rem">
+                ${['hasStructuredData','hasOgTags','metaDescription','canonical'].map(k => {
+                    const on = !!m[k];
+                    const label = {hasStructuredData:'Structured Data',hasOgTags:'OG Tags',metaDescription:'Meta Desc',canonical:'Canonical'}[k];
+                    return `<span class="signal-pill ${on?'on':'off'}">${label}</span>`;
+                }).join('')}
+            </div>
+        </div>
+    </div>` : '';
+
+    const agentCardsHtml = `
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Agent Inspection — Brief · Output · JSON per agent</div>
+            <div style="font-size:0.72rem;color:var(--muted)">click to expand</div>
+        </div>
+        <div class="card-body" style="padding:0">
+            <div class="agent-cards" style="padding:1rem 1.1rem">
+                ${(data.agents||[]).map(ag => {
+                    const label = AGENT_LABELS[ag.key] || ag.key;
+                    const sig = detectSignals(ag.userMessage || '');
+                    const msgLen = (ag.userMessage||'').length;
+                    const approxTok = approxTokens(ag.userMessage);
+                    const cardId = `agent-${ag.key}-${Date.now()}`;
+
+                    const signalPills = [
+                        ['HTML', sig.html],
+                        ['PageSpeed', sig.pagespeed],
+                        ['GSC', sig.gsc],
+                        ['GA4', sig.ga4],
+                        ['DataForSEO Rank', sig.dataforseo],
+                        ['Competitors', sig.competitors],
+                        ['Interior Pages', sig.interior],
+                    ].map(([name, on]) =>
+                        `<span class="signal-pill ${on?'on':'off'}">${name}</span>`
+                    ).join('');
+
+                    return `
+                    <div class="agent-card" id="${cardId}">
+                        <div class="agent-card-header" onclick="toggleAgent('${cardId}')">
+                            <div class="agent-card-left">
+                                <span class="agent-card-name">${label}</span>
+                                <span class="agent-card-meta">${fmt(ag.inputTokens)} in · ${fmt(ag.outputTokens)} out</span>
+                            </div>
+                            <div class="agent-card-right">
+                                <span class="agent-card-score ${scoreClass(ag.score)}">${ag.score}</span>
+                                <span class="chevron">▼</span>
+                            </div>
+                        </div>
+                        <div class="agent-card-body">
+                            <div class="tab-bar">
+                                <button class="tab-btn active" onclick="switchTab(this,'${cardId}','jd')">Analyst Job</button>
+                                <button class="tab-btn" onclick="switchTab(this,'${cardId}','brief')">Data In</button>
+                                <button class="tab-btn" onclick="switchTab(this,'${cardId}','json')">Analyst Raw Output</button>
+                                <button class="tab-btn" onclick="switchTab(this,'${cardId}','output')">Formatted Report</button>
+                            </div>
+                            <div class="tab-panel" data-tab="output" data-card="${cardId}">
+                                ${renderAgentOutput(ag)}
+                            </div>
+                            <div class="tab-panel" data-tab="brief" data-card="${cardId}">
+                                <div class="brief-stats">
+                                    <div class="brief-stat"><span class="brief-stat-label">Characters: </span><span class="brief-stat-val">${msgLen.toLocaleString()}</span></div>
+                                    <div class="brief-stat"><span class="brief-stat-label">~Tokens (input): </span><span class="brief-stat-val">${fmt(ag.inputTokens) !== '—' ? fmt(ag.inputTokens) : '~'+approxTok.toLocaleString()}</span></div>
+                                </div>
+                                <div class="brief-signals">${signalPills}</div>
+                                <pre class="brief-pre">${esc(ag.userMessage || '')}</pre>
+                            </div>
+                            <div class="tab-panel" data-tab="json" data-card="${cardId}">
+                                <pre class="json-pre">${highlightJson(ag.result||{})}</pre>
+                            </div>
+                            <div class="tab-panel active" data-tab="jd" data-card="${cardId}">
+                                ${ag.systemPrompt ? `
+                                <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.65rem">
+                                    System prompt as recorded at audit time. Edit in <code style="font-family:var(--mono);background:var(--tag-bg);padding:0.1rem 0.3rem;border-radius:3px">lib/agents.ts</code> to change future runs.
+                                </div>
+                                <div class="sysprompt-md">${marked.parse(ag.systemPrompt)}</div>
+                                ` : `
+                                <div style="font-size:0.82rem;color:var(--muted);padding:0.5rem 0">
+                                    Not available — this record predates system prompt storage.
+                                </div>`}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>
+    </div>`;
+
+    const s = data.summary || {};
+    const summaryHtml = s.overall_verdict || (s.top_priorities && s.top_priorities.length) ? `
+    <div class="card">
+        <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
+            <span class="collapsible-label">Summary Agent Output</span>
+            <div class="collapsible-meta">
+                ${data.summaryTokens ? `<span>${fmt(data.summaryTokens.input)} in · ${fmt(data.summaryTokens.output)} out</span>` : ''}
+                <span class="chevron">▼</span>
+            </div>
+        </div>
+        <div class="collapsible-body">
+            <div class="summary-grid">
+                ${s.overall_verdict ? `
+                <div>
+                    <div class="out-label" style="margin-bottom:0.5rem">Overall Verdict</div>
+                    <div class="verdict-text">${esc(s.overall_verdict)}</div>
+                </div>` : ''}
+                ${s.top_priorities && s.top_priorities.length ? `
+                <div>
+                    <div class="out-label" style="margin-bottom:0.5rem">Top Priorities</div>
+                    ${s.top_priorities.map(p=>`
+                    <div class="priority-item">
+                        <div class="priority-rank">${p.rank}</div>
+                        <div>
+                            <div class="priority-area">${esc(p.area)}</div>
+                            <div class="priority-finding">${esc(p.finding)}</div>
+                            ${p.action ? `<div class="priority-action"><strong>Action:</strong> ${esc(p.action)}</div>` : ''}
+                        </div>
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>
+            ${s.quick_wins && s.quick_wins.length ? `
+            <div style="margin-top:1rem">
+                <div class="out-label" style="margin-bottom:0.5rem">Quick Wins</div>
+                <div class="item-list">${s.quick_wins.map(w=>`<div class="item win">${esc(w)}</div>`).join('')}</div>
+            </div>` : ''}
+        </div>
+    </div>` : '';
+
+    const totalIn  = (data.agents||[]).reduce((a,ag)=>a+(ag.inputTokens||0),0) + ((data.summaryTokens||{}).input||0);
+    const totalOut = (data.agents||[]).reduce((a,ag)=>a+(ag.outputTokens||0),0) + ((data.summaryTokens||{}).output||0);
+    const statsHtml = `
+    <div class="card">
+        <div class="card-header"><div class="card-title">Run Stats</div></div>
+        <div class="card-body">
+            <div class="stats-row" style="margin-bottom:0.85rem">
+                <div><div class="stat-label">Total Input</div><div class="stat-val">${fmt(totalIn)}</div></div>
+                <div><div class="stat-label">Total Output</div><div class="stat-val">${fmt(totalOut)}</div></div>
+                ${data.durationMs ? `<div><div class="stat-label">Duration</div><div class="stat-val">${fmtMs(data.durationMs)}</div></div>` : ''}
+                ${data.model ? `<div><div class="stat-label">Model</div><div class="stat-val" style="font-size:0.78rem">${esc(data.model)}</div></div>` : ''}
+            </div>
+            <div class="stats-row">
+                ${(data.agents||[]).map(ag=>`
+                <div>
+                    <div class="stat-label">${AGENT_LABELS[ag.key]||ag.key}</div>
+                    <div class="stat-val" style="font-size:0.78rem">${fmt(ag.inputTokens)}↓ ${fmt(ag.outputTokens)}↑</div>
+                </div>`).join('')}
+                ${data.summaryTokens ? `<div><div class="stat-label">Summary</div><div class="stat-val" style="font-size:0.78rem">${fmt(data.summaryTokens.input)}↓ ${fmt(data.summaryTokens.output)}↑</div></div>` : ''}
+            </div>
+        </div>
+    </div>`;
+
+    document.getElementById('inspector').innerHTML =
+        headerHtml + richnessHtml + rawContextHtml + metaHtml + agentCardsHtml + summaryHtml + statsHtml;
+}
+
+// ── UI interactions ────────────────────────────────────────────────────────
+function toggleAgent(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+}
+
+function toggleCollapsible(header) {
+    const body = header.nextElementSibling;
+    body.classList.toggle('visible');
+    header.classList.toggle('collapsible-open');
+}
+
+function switchTab(btn, cardId, tabName) {
+    const card = document.getElementById(cardId);
+    card.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    card.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    card.querySelector(`.tab-panel[data-tab="${tabName}"]`).classList.add('active');
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function goTo(idx) {
+    current = Math.max(0, Math.min(entries.length - 1, idx));
+    renderInspector(entries[current]);
+    updateNav();
+    window.scrollTo(0, 0);
+}
+
+function updateNav() {
+    document.getElementById('nav-index').textContent = `${current + 1} / ${entries.length}`;
+    document.getElementById('nav-count').textContent = `${entries.length} audit${entries.length!==1?'s':''}`;
+    document.getElementById('btn-prev').disabled = current === 0;
+    document.getElementById('btn-first').disabled = current === 0;
+    document.getElementById('btn-next').disabled = current === entries.length - 1;
+    document.getElementById('btn-last').disabled = current === entries.length - 1;
+}
+
+function loadEntries(data) {
+    entries = data;
+    current = 0;
+    document.getElementById('load-screen').style.display = 'none';
+    document.getElementById('main').style.display = '';
+    updateNav();
+    renderInspector(entries[0]);
+}
+
+// ── DB fetch ───────────────────────────────────────────────────────────────
+async function fetchFromDb() {
+    document.getElementById('load-status').textContent = 'Loading audits…';
+    document.getElementById('load-screen').style.display = '';
+    document.getElementById('main').style.display = 'none';
+    try {
+        const url = '/api/admin/audits' + (pageKey ? `?key=${encodeURIComponent(pageKey)}` : '');
+        const res = await fetch(url);
+        if (res.status === 401) {
+            document.getElementById('load-status').textContent = 'Unauthorized — check your URL key.';
+            return;
+        }
+        if (!res.ok) {
+            document.getElementById('load-status').textContent = `Error ${res.status}: ${await res.text()}`;
+            return;
+        }
+        const data = await res.json();
+        if (!Array.isArray(data) || !data.length) {
+            document.getElementById('load-status').textContent = 'No audits found.';
+            return;
+        }
+        loadEntries(data);
+    } catch(err) {
+        document.getElementById('load-status').textContent = `Failed: ${err.message}`;
+    }
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────
+document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+document.getElementById('btn-first').addEventListener('click', () => goTo(0));
+document.getElementById('btn-last').addEventListener('click', () => goTo(entries.length - 1));
+document.getElementById('btn-reload').addEventListener('click', fetchFromDb);
+
+document.addEventListener('keydown', e => {
+    if (!entries.length || document.activeElement.tagName === 'INPUT') return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goTo(current - 1);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+});
+
+document.addEventListener('DOMContentLoaded', fetchFromDb);
+</script>
+</body>
+</html>
