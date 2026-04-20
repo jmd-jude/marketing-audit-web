@@ -616,6 +616,251 @@ function renderAgentOutput(ag) {
     return html || '<div style="font-size:0.8rem;color:var(--muted)">No structured output.</div>';
 }
 
+// ── Download helpers ───────────────────────────────────────────────────────
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function slugFromUrl(url) {
+    return (url || 'audit').replace(/https?:\/\//,'').replace(/[^a-z0-9]/gi,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+}
+
+function generateReportJson(data) {
+    return {
+        url: data.url,
+        timestamp: data.timestamp,
+        auditor: data.auditor,
+        compositeScore: data.compositeScore,
+        pageMetadata: data.pageMetadata ? {
+            title: data.pageMetadata.title,
+            metaDescription: data.pageMetadata.metaDescription,
+            h1s: data.pageMetadata.h1s,
+            wordCount: data.pageMetadata.wordCount,
+            canonical: data.pageMetadata.canonical,
+            hasStructuredData: data.pageMetadata.hasStructuredData,
+            hasOgTags: data.pageMetadata.hasOgTags,
+            metaRobots: data.pageMetadata.metaRobots,
+        } : null,
+        pagesAnalyzed: (data.pagesAnalyzed || []).map(p => ({ url: p.url, status: p.status, chars: p.chars })),
+        summary: data.summary,
+        agents: (data.agents || []).map(ag => ({
+            key: ag.key,
+            label: AGENT_LABELS[ag.key] || ag.key,
+            score: ag.score,
+            result: ag.result,
+        })),
+    };
+}
+
+function generateMarkdown(data) {
+    const date = new Date(data.timestamp).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+    const L = [];
+    const push = s => L.push(s ?? '');
+
+    push(`# Site Audit: ${data.url}`);
+    push(`**Date:** ${date}`);
+    if (data.auditor) push(`**Auditor:** ${data.auditor}`);
+    push(`**Composite Score:** ${data.compositeScore}/100`);
+    push('');
+
+    const m = data.pageMetadata;
+    if (m) {
+        push('## Page Metadata');
+        if (m.title)           push(`**Title:** ${m.title}`);
+        if (m.metaDescription) push(`**Meta Description:** ${m.metaDescription}`);
+        if (m.h1s && m.h1s.length) push(`**H1s:** ${m.h1s.join(' / ')}`);
+        if (m.wordCount)       push(`**Word Count:** ~${m.wordCount.toLocaleString()}`);
+        if (m.canonical)       push(`**Canonical:** ${m.canonical}`);
+        push('');
+    }
+
+    if (Array.isArray(data.pagesAnalyzed) && data.pagesAnalyzed.length) {
+        push('## Interior Pages Analyzed');
+        data.pagesAnalyzed.forEach(p => {
+            push(`- **${p.url}** — ${p.status}${p.chars ? ` (${(p.chars/1000).toFixed(1)}k chars)` : ''}`);
+        });
+        push('');
+    }
+
+    const s = data.summary || {};
+    if (s.overall_verdict || (s.top_priorities && s.top_priorities.length) || (s.quick_wins && s.quick_wins.length)) {
+        push('## Summary');
+        if (s.overall_verdict) {
+            push('### Overall Verdict');
+            push(s.overall_verdict);
+            push('');
+        }
+        if (s.top_priorities && s.top_priorities.length) {
+            push('### Top Priorities');
+            s.top_priorities.forEach(p => {
+                push(`**${p.rank}. ${p.area}**`);
+                push(p.finding);
+                if (p.action) push(`→ ${p.action}`);
+                push('');
+            });
+        }
+        if (s.quick_wins && s.quick_wins.length) {
+            push('### Quick Wins');
+            s.quick_wins.forEach(w => push(`- ${w}`));
+            push('');
+        }
+    }
+
+    (data.agents || []).forEach(ag => {
+        const label = AGENT_LABELS[ag.key] || ag.key;
+        const r = ag.result || {};
+        push(`## ${label}`);
+        if (ag.score != null) push(`**Score:** ${ag.score}/100`);
+        push('');
+
+        if (Array.isArray(r.dimensions) && r.dimensions.length) {
+            push('### Dimensions');
+            r.dimensions.forEach(d => push(`**${d.name}:** ${d.score}/10${d.finding ? ` — ${d.finding}` : ''}`));
+            push('');
+        }
+        if (Array.isArray(r.wins) && r.wins.length) {
+            push('### Strengths');
+            r.wins.forEach(w => push(`- ${w}`));
+            push('');
+        }
+        if (Array.isArray(r.critical_fixes) && r.critical_fixes.length) {
+            push('### Critical Fixes');
+            r.critical_fixes.forEach(f => push(`- ${f}`));
+            push('');
+        }
+        if (Array.isArray(r.before_after) && r.before_after.length) {
+            push('### Copy Rewrites');
+            r.before_after.forEach(ba => {
+                push(`**${ba.element}**`);
+                push('| | |');
+                push('|---|---|');
+                push(`| Before | ${ba.before} |`);
+                push(`| After | ${ba.after} |`);
+                if (ba.why) push(`*${ba.why}*`);
+                push('');
+            });
+        }
+        if (Array.isArray(r.quick_wins) && r.quick_wins.length) {
+            push('### Quick Wins');
+            r.quick_wins.forEach(w => push(`- ${w}`));
+            push('');
+        }
+        if (Array.isArray(r.funnel_leaks) && r.funnel_leaks.length) {
+            push('### Funnel Leaks');
+            r.funnel_leaks.forEach(l => {
+                push(`**[${l.severity}] ${l.stage}:** ${l.issue}`);
+                if (l.fix) push(`→ ${l.fix}`);
+                push('');
+            });
+        }
+        if (Array.isArray(r.ab_tests) && r.ab_tests.length) {
+            push('### A/B Test Ideas');
+            r.ab_tests.forEach(t => {
+                push(`- *${t.hypothesis}*`);
+                push(`  Metric: ${t.metric}${t.impact ? ` · Impact: ${t.impact}` : ''}`);
+            });
+            push('');
+        }
+        if (r.pagespeed) {
+            const ps = r.pagespeed;
+            push('### PageSpeed');
+            push('| Performance | Accessibility | SEO | Best Practices |');
+            push('|---|---|---|---|');
+            push(`| ${ps.performance ?? '—'} | ${ps.accessibility ?? '—'} | ${ps.seo ?? '—'} | ${ps.best_practices ?? '—'} |`);
+            const cwv = [['LCP',ps.lcp],['CLS',ps.cls],['TBT',ps.tbt],['FCP',ps.fcp]].filter(([,v])=>v);
+            if (cwv.length) push(cwv.map(([k,v])=>`**${k}:** ${v}`).join(' · '));
+            push('');
+        }
+        if (Array.isArray(r.seo_quick_wins) && r.seo_quick_wins.length) {
+            push('### SEO Quick Wins');
+            r.seo_quick_wins.forEach(w => push(`- ${w}`));
+            push('');
+        }
+        if (Array.isArray(r.technical_issues) && r.technical_issues.length) {
+            push('### Technical Issues');
+            r.technical_issues.forEach(i => {
+                push(`**[${i.severity}] ${i.issue}**`);
+                if (i.impact) push(i.impact);
+                if (i.fix) push(`→ ${i.fix}`);
+                push('');
+            });
+        }
+        if (Array.isArray(r.tracking_status) && r.tracking_status.length) {
+            push('### Tracking Status');
+            r.tracking_status.forEach(t => push(`- **${t.tool}:** ${t.present ? 'Present' : 'Missing'}${t.notes ? ` — ${t.notes}` : ''}`));
+            push('');
+        }
+        if (Array.isArray(r.likely_competitors) && r.likely_competitors.length) {
+            push('### Competitors');
+            r.likely_competitors.forEach(c => {
+                push(`**${c.name}**`);
+                push(`Strength: ${c.strength}`);
+                push(`Weakness: ${c.weakness}`);
+                push('');
+            });
+        }
+        if (Array.isArray(r.opportunities) && r.opportunities.length) {
+            push('### Opportunities');
+            r.opportunities.forEach(o => {
+                push(`**${o.title}**`);
+                push(o.description);
+                push('');
+            });
+        }
+        if (Array.isArray(r.recommended_actions) && r.recommended_actions.length) {
+            push('### Recommended Actions');
+            r.recommended_actions.forEach(a => push(`- ${a}`));
+            push('');
+        }
+        if (r.biggest_lever) {
+            push('### Biggest Lever');
+            push(r.biggest_lever);
+            push('');
+        }
+        if (r.revenue_opportunities) {
+            const rev = r.revenue_opportunities;
+            push('### Revenue Opportunities');
+            function revTier(items, tierLabel) {
+                if (!Array.isArray(items) || !items.length) return;
+                push(`**${tierLabel}**`);
+                items.forEach(i => push(`- [${i.effort}] ${i.opportunity}${i.impact ? ` — ${i.impact}` : ''}`));
+            }
+            revTier(rev.quick_wins, 'Quick Wins');
+            revTier(rev.medium_term, 'Medium Term');
+            revTier(rev.strategic, 'Strategic');
+            push('');
+        }
+        if (r.brand_score != null || r.growth_score != null) {
+            push('### Brand & Growth Scores');
+            if (r.brand_score != null) push(`**Brand Score:** ${r.brand_score}`);
+            if (r.growth_score != null) push(`**Growth Score:** ${r.growth_score}`);
+            push('');
+        }
+    });
+
+    return L.join('\n');
+}
+
+function downloadMarkdown() {
+    if (!entries.length) return;
+    const data = entries[current];
+    downloadFile(generateMarkdown(data), `audit-${slugFromUrl(data.url)}.md`, 'text/markdown');
+}
+
+function downloadJson() {
+    if (!entries.length) return;
+    const data = entries[current];
+    downloadFile(JSON.stringify(generateReportJson(data), null, 2), `audit-${slugFromUrl(data.url)}.json`, 'application/json');
+}
+
 // ── Main render ────────────────────────────────────────────────────────────
 function renderInspector(data) {
     const date = new Date(data.timestamp).toLocaleString('en-US',{
@@ -637,6 +882,10 @@ function renderInspector(data) {
         <div class="run-score-block">
             <div class="run-score ${scoreClass(data.compositeScore)}">${data.compositeScore}</div>
             <div class="run-score-label">Composite Score</div>
+            <div style="display:flex;gap:0.35rem;margin-top:0.6rem;justify-content:flex-end">
+                <button class="nav-btn" onclick="downloadMarkdown()" title="Download report as Markdown">↓ MD</button>
+                <button class="nav-btn" onclick="downloadJson()" title="Download report as JSON">↓ JSON</button>
+            </div>
         </div>
     </div>`;
 
