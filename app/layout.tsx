@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
+import { SiteHeader } from "@/components/SiteHeader"
+import { SiteFooter } from "@/components/SiteFooter"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,7 +36,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}<Analytics /></body>
+      <body className="min-h-full flex flex-col">
+        <SiteHeader />
+        <main className="flex-1">
+          {children}
+        </main>
+        <SiteFooter />
+        <Analytics />
+      </body>
     </html>
   );
 }

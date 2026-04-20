@@ -615,31 +615,21 @@ function BiggestLever({ lever }: { lever: string }) {
 // ─── sticky nav bar (unlocked only) ──────────────────────────────────────────
 
 function StickyBar({
-  displayName,
-  compositeScore,
   activeSection,
   onNav,
 }: {
-  displayName: string
-  compositeScore: number
   activeSection: string
   onNav: (id: string) => void
 }) {
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#E8E4DC] shadow-sm">
-      <div className="max-w-[1160px] mx-auto px-6 h-12 relative flex items-center">
-        {/* <div className="absolute left-6 flex items-center gap-3">
-          <span className="text-xs font-semibold text-[#6B6560] truncate max-w-[140px]">{displayName}</span>
-          <span className={`text-sm font-black tabular-nums ${scoreColor(compositeScore)}`}>{compositeScore}</span>
-          <span className={`text-[10px] font-semibold ${scoreColor(compositeScore)}`}>{scoreLabel(compositeScore)}</span>
-          <div className="w-px h-4 bg-[#E8E4DC]" />
-        </div> */}
+    <div className="sticky top-[57px] z-20 bg-white border-b border-[#E8E4DC] shadow-sm">
+      <div className="max-w-[900px] mx-auto px-6 h-12 flex items-center">
         <div className="mx-auto flex items-center gap-0.5 overflow-x-auto">
           {NAV_SECTIONS.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => onNav(id)}
-              className={`flex-shrink-0 text-md px-3 py-1.5 rounded-md transition-colors ${
+              className={`flex-shrink-0 text-sm px-3 py-1.5 rounded-md transition-colors ${
                 activeSection === id
                   ? 'bg-[#EEF2F8] text-[#2D4A6E] font-bold'
                   : 'text-[#9C9690] hover:text-[#1A1918]'
@@ -670,10 +660,6 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
   const compositeScore: number = data.compositeScore ?? 0
   const priorities: D[] = summary.top_priorities ?? []
 
-  const displayName = data.auditor
-    ? data.auditor
-    : new URL(data.url.startsWith('http') ? data.url : `https://${data.url}`).hostname.replace(/^www\./, '')
-
   const orderedAgents = AGENT_ORDER
     .map((key) => agents.find((a) => a.key === key))
     .filter((a): a is D => Boolean(a))
@@ -686,29 +672,16 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
   const activeAgent = orderedAgents.find((a) => `section-${a.key}` === activeSection)
 
   return (
-    <div className="min-h-screen bg-[#F4F2EF] py-12 px-4">
+    <div className="pb-12 px-4">
 
       {unlocked && (
         <StickyBar
-          displayName={displayName}
-          compositeScore={compositeScore}
           activeSection={activeSection}
           onNav={navTo}
         />
       )}
 
-      <div className={`mx-auto space-y-4 ${unlocked ? 'max-w-[1160px] pt-8' : 'max-w-[900px]'}`}>
-
-        {/* Header */}
-        <div className="mb-8">
-          <div className="text-lg font-semibold uppercase tracking-widest text-[#9C9690] mb-1">
-            Marketing Audit
-          </div>
-          <h1 className="font-serif text-xl font-semibold text-[#1A1918] tracking-tight">
-            {displayName}
-          </h1>
-          <div className="text-lg text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
-        </div>
+      <div className="mx-auto space-y-4 max-w-[900px] pt-8">
 
         {/* Free state: score block, assessment, what we analyzed, findings, gate */}
         {!unlocked && (
@@ -717,6 +690,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
               <div className="px-6 py-6 flex items-center justify-between gap-6">
                 <div>
                   <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
+                  <div className="text-xs text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
                 </div>
                 <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
                   <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
@@ -757,6 +731,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
                   <div className="px-6 py-6 flex items-center justify-between gap-6">
                     <div>
                       <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
+                      <div className="text-xs text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
                     </div>
                     <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
                       <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
@@ -832,19 +807,6 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
 
           </div>
         )}
-
-        {/* Footer */}
-        <div className="text-center text-xs text-[#9C9690] pt-4 pb-8 space-y-2">
-          <div>
-            <a href="/" className="text-[#2D4A6E] hover:underline">Run another audit on any site →</a>
-          </div>
-          <div>
-            Questions about this report?{' '}
-            <a href="mailto:jude@hoffnermarketing.com" className="text-[#2D4A6E] hover:underline">
-              jude@hoffnermarketing.com
-            </a>
-          </div>
-        </div>
 
       </div>
     </div>

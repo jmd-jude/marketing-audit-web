@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Marketing Intelligence — Claude Code Context
 
 ## What This Is
@@ -25,11 +29,15 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
 | `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data (domain rank overview + competitors), returns formatted context strings |
+| `app/api/gate/route.ts` | Node runtime route — receives email capture from gate card, fires Discord with pre-built `?full=1` URL |
+| `app/api/admin/audits/route.ts` | Node runtime route — internal admin access to audit records |
 | `app/api/auth/` | Stubbed OAuth routes (410 Gone) — no longer active, kept to avoid 404s |
+| `app/sample/page.tsx` | Server component — renders a pre-unlocked full report using `SAMPLE_AUDIT_ID`; 404 if env var unset |
 | `lib/agents.ts` | All 5 agent system prompts + weights config |
 | `lib/gsc-ga4.ts` | Service account auth, GSC + GA4 API calls, GA4 property discovery, context formatters |
 | `components/DataSourcesPanel.tsx` | Data sources tier UI (active / available / roadmap) |
-| `scripts/setup-db.ts` | One-time Neon table creation — run with `npx tsx scripts/setup-db.ts` |
+| `scripts/setup-db.ts` | One-time Neon table creation |
+| `scripts/test-dataforseo.ts` | Utility for debugging DataForSEO API calls |
 | `logs/viewer.html` | Internal audit explorer — load audit-data.jsonl to page through runs |
 | `product-docs/ROADMAP.md` | Product backlog and tier model |
 | `product-docs/ARCHITECTURE.md` | System architecture diagrams — current state, full vision, and direct mail parallel |
@@ -77,9 +85,11 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 ## Development
 
 ```bash
-npm run dev       # local dev server
+npm run dev       # local dev server on port 3001
 npm run build     # production build (run before deploying)
 npm run lint      # ESLint
+npx tsx scripts/setup-db.ts     # one-time: create Neon audits table
+npx tsx scripts/test-dataforseo.ts  # debug DataForSEO API calls
 ```
 
 ## Data Sources & Tier Model

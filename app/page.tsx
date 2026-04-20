@@ -1,81 +1,22 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-
-import { DataSourcesPanel } from '@/components/DataSourcesPanel'
-
-interface ExecutiveSummary {
-  overall_verdict: string
-  top_priorities: Array<{
-    rank: number
-    area: string
-    finding: string
-    why_it_matters: string
-    action: string
-  }>
-  biggest_strength: string
-  quick_wins: string[]
-}
-
-function scoreColor(score: number) {
-  if (score >= 75) return 'text-emerald-700'
-  if (score >= 55) return 'text-amber-600'
-  return 'text-red-700'
-}
-
-
-function ScoreRing({ score, size = 96 }: { score: number | null; size?: number }) {
-  const r = (size / 2) - 6
-  const circ = 2 * Math.PI * r
-
-  if (score === null) {
-    return (
-      <div
-        className="rounded-full border-4 border-t-[#2D4A6E] border-[#E8E4DC] animate-spin flex-shrink-0"
-        style={{ width: size, height: size }}
-      />
-    )
-  }
-
-  const dash = (score / 100) * circ
-  const color = score >= 75 ? '#15803d' : score >= 55 ? '#b45309' : '#b91c1c'
-
-  return (
-    <svg width={size} height={size} className="flex-shrink-0" style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E8E4DC" strokeWidth="5" />
-      <circle
-        cx={size / 2} cy={size / 2} r={r} fill="none"
-        stroke={color} strokeWidth="5"
-        strokeDasharray={`${dash} ${circ}`}
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
+import { useRouter } from 'next/navigation'
 
 const RUN_LIMIT = 2
 
 export default function Home() {
+  const router = useRouter()
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
-  const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'running'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [agentsComplete, setAgentsComplete] = useState(0)
-  const [compositeScore, setCompositeScore] = useState<number | null>(null)
-  const [summaryResult, setSummaryResult] = useState<ExecutiveSummary | null>(null)
   const [savedCode, setSavedCode] = useState<string | null>(null)
   const [inviteCode, setInviteCode] = useState('')
   const [inviteError, setInviteError] = useState('')
   const [auditCount, setAuditCount] = useState(0)
-  const [dataConnected, setDataConnected] = useState(false)
-  const [dataCompetitive, setDataCompetitive] = useState(false)
-  const [hasPageSpeed, setHasPageSpeed] = useState(false)
-  const [pagesAnalyzed, setPagesAnalyzed] = useState<Array<{ url: string; status: string }>>([])
-  const [auditId, setAuditId] = useState<string | null>(null)
-  const [gateEmail, setGateEmail] = useState('')
-  const [gateSubmitting, setGateSubmitting] = useState(false)
-  const [gateSubmitted, setGateSubmitted] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -92,17 +33,7 @@ export default function Home() {
     setInviteError('')
     setPhase('running')
     setStatusMsg('Connecting...')
-    setCompositeScore(null)
     setAgentsComplete(0)
-    setSummaryResult(null)
-    setDataConnected(false)
-    setDataCompetitive(false)
-    setHasPageSpeed(false)
-    setPagesAnalyzed([])
-    setAuditId(null)
-    setGateEmail('')
-    setGateSubmitting(false)
-    setGateSubmitted(false)
     abortRef.current = new AbortController()
 
     try {
@@ -134,31 +65,14 @@ export default function Home() {
           if (!line.startsWith('data: ')) continue
           try {
             const event = JSON.parse(line.slice(6))
-            if (event.type === 'start') {
-              setStatusMsg(event.message)
-            }
-            if (event.type === 'fetched') {
-              setStatusMsg(event.message)
-              if (event.connected) setDataConnected(true)
-              if (event.competitive) setDataCompetitive(true)
-              if (event.pageSpeed) setHasPageSpeed(true)
-              if (event.pagesAnalyzed) setPagesAnalyzed(event.pagesAnalyzed)
-            }
+            if (event.type === 'start') setStatusMsg(event.message)
+            if (event.type === 'fetched') setStatusMsg(event.message)
             if (event.type === 'agent_complete') {
               setAgentsComplete((n) => n + 1)
               setStatusMsg('Analysis compiling...')
             }
-            if (event.type === 'summary_running') {
-              setStatusMsg(event.message)
-            }
-            if (event.type === 'summary_complete') {
-              setSummaryResult(event.result as ExecutiveSummary)
-            }
+            if (event.type === 'summary_running') setStatusMsg(event.message)
             if (event.type === 'complete') {
-              setCompositeScore(event.compositeScore)
-              if (event.auditId) setAuditId(event.auditId)
-              setPhase('done')
-              setStatusMsg('Analysis complete')
               if (!savedCode && inviteCode.trim()) {
                 localStorage.setItem('invite_code', inviteCode.trim())
                 setSavedCode(inviteCode.trim())
@@ -168,6 +82,7 @@ export default function Home() {
                 localStorage.setItem('audit_count', String(next))
                 return next
               })
+              if (event.auditId) router.push(`/audit/${event.auditId}`)
             }
           } catch { /* skip malformed events */ }
         }
@@ -180,48 +95,9 @@ export default function Home() {
     }
   }
 
-  const reset = () => {
-    abortRef.current?.abort()
-    setPhase('idle')
-    setCompositeScore(null)
-    setStatusMsg('')
-    setAgentsComplete(0)
-    setSummaryResult(null)
-    setUrl('')
-    setName('')
-    setCompany('')
-    setDataConnected(false)
-    setDataCompetitive(false)
-    setHasPageSpeed(false)
-    setPagesAnalyzed([])
-    setAuditId(null)
-    setGateEmail('')
-    setGateSubmitting(false)
-    setGateSubmitted(false)
-  }
-
-  const targetUrl = url.startsWith('http') ? url : `https://${url}`
-
   return (
-    <div className="min-h-screen bg-[#F4F2EF]">
-      <header className="bg-white border-b border-[#E8E4DC] px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-[#1A1918] text-lg tracking-tight">Marketing Intelligence</h1>
-            {phase === 'idle'
-              ? <p className="text-[#6B6560] text-xs mt-0.5">Digital Audits at Digital Speeds</p>
-              : <p className="text-[#3D3936] text-xs mt-0.5 font-medium">{targetUrl}</p>
-            }
-          </div>
-          {phase !== 'idle' && (
-            <button onClick={reset} className="text-[#6B6560] hover:text-[#1A1918] text-sm transition-colors">
-              New Audit
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-6 py-14">
+    <div>
+      <div className="max-w-5xl mx-auto px-6 py-14">
 
         {/* ── IDLE: run limit hit ── */}
         {phase === 'idle' && auditCount >= RUN_LIMIT && (
@@ -256,7 +132,7 @@ export default function Home() {
               <p className="text-[#6B6560] text-lg max-w-xl mx-auto leading-relaxed">
                 Enter any website URL. Receive a scored report with specific findings and action steps across 5 dimensions: content, conversion, SEO, competitive positioning, and brand strategy.
               </p>
-              <p className="text-[#9C9690] text-md">See first findings in about two minutes. No account required.</p>
+              <p className="text-[#9C9690] text-sm">See first findings in about two minutes. No account required.</p>
             </div>
 
             <div className="max-w-lg mx-auto space-y-3">
@@ -310,7 +186,7 @@ export default function Home() {
               )}
             </div>
 
-            <p className="text-[#9C9690] text-md">
+            <p className="text-[#9C9690] text-sm">
               Not sure what to expect?{' '}
               <a href="/sample" className="text-[#2D4A6E] hover:underline">See a sample report →</a>
             </p>
@@ -383,7 +259,7 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-                    <div className="px-5 py-3 bg-[#F4F2EF] border-t border-[#E8E4DC] flex items-center justify-between">
+                    <div className="px-5 py-3 bg-[#F4F2EF] border-t border-[#E8E4DC]">
                       <span className="text-[10px] text-[#6B6560]">Full report includes priority actions + quick wins</span>
                     </div>
                   </div>
@@ -398,7 +274,10 @@ export default function Home() {
         {phase === 'running' && (
           <div className="max-w-lg mx-auto">
             <div className="bg-white rounded-xl border border-[#E8E4DC] p-8 flex flex-col items-center gap-6 text-center">
-              <ScoreRing score={null} size={80} />
+              <div
+                className="rounded-full border-4 border-t-[#2D4A6E] border-[#E8E4DC] animate-spin flex-shrink-0"
+                style={{ width: 80, height: 80 }}
+              />
               <div>
                 <div className="font-display text-[#1A1918] text-lg">Analyzing your site</div>
                 <div className="text-[#6B6560] text-sm mt-1">{statusMsg}</div>
@@ -416,128 +295,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── DONE ── */}
-        {phase === 'done' && compositeScore !== null && (
-          <div className="max-w-2xl mx-auto space-y-4">
-
-            {/* Score hero */}
-            <div className="bg-white rounded-xl border border-[#E8E4DC] p-6 flex items-center gap-6">
-              <div className="relative flex-shrink-0">
-                <ScoreRing score={compositeScore} size={96} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className={`text-2xl font-bold tabular-nums ${scoreColor(compositeScore)}`}>{compositeScore}</span>
-                  <span className="text-[#9C9690] text-xs">/100</span>
-                </div>
-              </div>
-              <div className="flex-1 min-w-0">
-                {summaryResult?.overall_verdict && (
-                  <p className="text-sm text-[#6B6560] leading-relaxed">{summaryResult.overall_verdict}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Top priorities — findings and business impact, no actions */}
-            {summaryResult?.top_priorities && summaryResult.top_priorities.length > 0 && (
-              <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-4">Top Priorities</div>
-                <div className="space-y-4">
-                  {summaryResult.top_priorities.slice(0, 3).map((p) => (
-                    <div key={p.rank} className="flex gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#F0EDE8] flex items-center justify-center text-xs font-bold text-[#6B6560]">
-                        {p.rank}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-[#2D4A6E] uppercase tracking-wide mb-0.5">{p.area}</div>
-                        <p className="text-sm text-[#1A1918] leading-relaxed">{p.finding}</p>
-                        {p.why_it_matters && (
-                          <p className="text-xs text-[#6B6560] mt-1 leading-relaxed">{p.why_it_matters}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Teaser close */}
-            <div className="bg-[#2D4A6E] rounded-xl px-6 py-6">
-              {gateSubmitted ? (
-                <div className="text-center space-y-1">
-                  <div className="text-white font-semibold text-sm">You&apos;re on the list.</div>
-                  <p className="text-[#A8C0D8] text-sm">We&apos;ll send the full report to <span className="text-white font-medium">{gateEmail}</span> shortly.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-white font-semibold text-sm mb-1">Get the full report</div>
-                    <p className="text-[#A8C0D8] text-sm leading-relaxed">
-                      Specific recommendations, priority actions, and quick wins for each dimension. We&apos;ll send it to you.
-                    </p>
-                  </div>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault()
-                      if (!gateEmail.trim() || !auditId) return
-                      setGateSubmitting(true)
-                      try {
-                        await fetch('/api/gate', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            email: gateEmail.trim(),
-                            auditId,
-                            url: targetUrl,
-                            auditor: name || undefined,
-                          }),
-                        })
-                        setGateSubmitted(true)
-                      } finally {
-                        setGateSubmitting(false)
-                      }
-                    }}
-                    className="flex gap-2"
-                  >
-                    <input
-                      type="email"
-                      value={gateEmail}
-                      onChange={(e) => setGateEmail(e.target.value)}
-                      placeholder="Your email address"
-                      required
-                      className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-white text-[#1A1918] placeholder-[#C4BFB8] outline-none"
-                    />
-                    <button
-                      type="submit"
-                      disabled={gateSubmitting || !gateEmail.trim()}
-                      className="bg-white text-[#2D4A6E] font-semibold text-sm px-4 py-2.5 rounded-lg hover:bg-[#F0EDE8] transition-colors disabled:opacity-60 whitespace-nowrap"
-                    >
-                      {gateSubmitting ? 'Sending…' : 'Send my report'}
-                    </button>
-                  </form>
-                  <p className="text-[#7A9AB8] text-xs">No spam. Just your report.</p>
-                </div>
-              )}
-            </div>
-
-            <DataSourcesPanel
-              hasPageSpeed={hasPageSpeed}
-              googleConnected={dataConnected}
-              competitiveConnected={dataCompetitive}
-              pagesAnalyzed={pagesAnalyzed}
-            />
-
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={reset}
-                className="bg-white border border-[#E8E4DC] hover:border-[#2D4A6E] text-[#1A1918] hover:text-[#2D4A6E] text-sm px-6 py-2.5 rounded-lg transition-colors"
-              >
-                Audit Another Site
-              </button>
-            </div>
-
-          </div>
-        )}
-
-      </main>
+      </div>
     </div>
   )
 }
