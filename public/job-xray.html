@@ -183,7 +183,7 @@
         }
         .tab-btn:hover { color: var(--fg); }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .tab-panel { display: none; padding: 1rem 1.1rem; }
+        .tab-panel { display: none; padding: 1rem 1.1rem; max-height: 500px; overflow-y: auto; }
         .tab-panel.active { display: block; }
 
         /* ── Brief tab ────────────────────────────────── */
@@ -284,7 +284,7 @@
         .json-null  { color: #9CA3AF; font-style: italic; }
 
         /* ── System prompt tab ────────────────────────── */
-        .sysprompt-md { font-size: 0.78rem; line-height: 1.7; color: var(--fg); }
+        .sysprompt-md { font-size: 0.78rem; line-height: 1.7; color: var(--fg); max-height: 500px; overflow-y: auto; }
         .sysprompt-md h1, .sysprompt-md h2 { font-size: 0.82rem; font-weight: 700; margin: 1rem 0 0.35rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
         .sysprompt-md h3 { font-size: 0.76rem; font-weight: 700; margin: 0.75rem 0 0.25rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .sysprompt-md h1:first-child, .sysprompt-md h2:first-child { margin-top: 0; }
@@ -321,7 +321,7 @@
         .score-low { color: var(--score-low); }
 
         /* ── Rendered markdown (context blocks) ─────── */
-        .context-md { font-size: 0.78rem; line-height: 1.65; color: var(--fg); }
+        .context-md { font-size: 0.78rem; line-height: 1.65; color: var(--fg); max-height: 500px; overflow-y: auto; }
         .context-md h2 { font-size: 0.82rem; font-weight: 700; margin: 0.9rem 0 0.35rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
         .context-md h3 { font-size: 0.76rem; font-weight: 700; margin: 0.75rem 0 0.3rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
         .context-md h2:first-child, .context-md h3:first-child { margin-top: 0; }
@@ -686,7 +686,7 @@ function renderInspector(data) {
     const rawContextHtml = hasRawContext ? `
     <div class="card" style="overflow:visible">
         <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
-            <span class="collapsible-label">Raw Context Strings — Full text injected into agent prompts</span>
+            <span class="collapsible-label">Google: GA4 & Search Console</span>
             <div class="collapsible-meta">
                 ${gscPresent ? `<span>GSC ${(data.gscContext.length/1000).toFixed(1)}k chars</span>` : ''}
                 ${ga4Present ? `<span>GA4 ${(data.ga4Context.length/1000).toFixed(1)}k chars</span>` : ''}
