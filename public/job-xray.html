@@ -345,7 +345,17 @@
 
     <!-- Loading / error state -->
     <div id="load-screen" style="text-align:center;padding:4rem 0">
-        <div style="font-size:0.85rem;color:var(--muted)" id="load-status">Loading audits…</div>
+        <div id="key-form" style="display:inline-block;text-align:left">
+            <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem">Enter access key to continue</div>
+            <div style="display:flex;gap:0.5rem">
+                <input id="key-input" type="password" placeholder="Access key"
+                    style="padding:0.35rem 0.65rem;font-size:0.82rem;border:1px solid var(--border);border-radius:6px;outline:none;width:220px;background:var(--card);color:var(--fg)">
+                <button id="key-submit" onclick="submitKey()"
+                    style="padding:0.35rem 0.85rem;font-size:0.82rem;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Go</button>
+            </div>
+            <div style="font-size:0.75rem;color:var(--absent-text);margin-top:0.5rem;min-height:1em" id="key-error"></div>
+        </div>
+        <div style="font-size:0.85rem;color:var(--muted);display:none" id="load-status">Loading audits…</div>
     </div>
 
     <!-- Main view -->
@@ -373,7 +383,7 @@
 <script>
 // ── Utilities ──────────────────────────────────────────────────────────────
 let entries = [], current = 0;
-const pageKey = new URLSearchParams(window.location.search).get('key') || '';
+let pageKey = '';
 
 function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -933,6 +943,20 @@ function loadEntries(data) {
     renderInspector(entries[0]);
 }
 
+// ── Key gate ───────────────────────────────────────────────────────────────
+function submitKey() {
+    const val = document.getElementById('key-input').value.trim();
+    if (!val) return;
+    pageKey = val;
+    document.getElementById('key-form').style.display = 'none';
+    document.getElementById('load-status').style.display = '';
+    fetchFromDb();
+}
+
+document.getElementById('key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitKey();
+});
+
 // ── DB fetch ───────────────────────────────────────────────────────────────
 async function fetchFromDb() {
     document.getElementById('load-status').textContent = 'Loading audits…';
@@ -942,7 +966,10 @@ async function fetchFromDb() {
         const url = '/api/admin/audits' + (pageKey ? `?key=${encodeURIComponent(pageKey)}` : '');
         const res = await fetch(url);
         if (res.status === 401) {
-            document.getElementById('load-status').textContent = 'Unauthorized — check your URL key.';
+            document.getElementById('load-status').style.display = 'none';
+            document.getElementById('key-form').style.display = '';
+            document.getElementById('key-error').textContent = 'Incorrect key — try again.';
+            document.getElementById('key-input').value = '';
             return;
         }
         if (!res.ok) {
@@ -973,7 +1000,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
 });
 
-document.addEventListener('DOMContentLoaded', fetchFromDb);
+// Key form shown on load — no auto-fetch
 </script>
 </body>
 </html>
