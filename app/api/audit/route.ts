@@ -45,6 +45,27 @@ interface PageMetadata {
   hasStructuredData: boolean
   hasOgTags: boolean
   metaRobots: string | null
+  generator?: string | null
+}
+
+interface FirecrawlMetadata {
+  title?: string
+  description?: string
+  'og:title'?: string
+  'og:description'?: string
+  'og:image'?: string
+  generator?: string
+  language?: string
+  canonical?: string
+  robots?: string
+  sourceURL?: string
+  [key: string]: string | undefined
+}
+
+interface FirecrawlResult {
+  markdown: string
+  metadata: FirecrawlMetadata
+  links: string[]
 }
 
 interface PageAnalyzed {
@@ -121,6 +142,63 @@ function scoreLink(path: string): { score: number; agents: AgentKey[] } | null {
   return null
 }
 
+async function firecrawlFetch(url: string, timeout = 8000): Promise<FirecrawlResult | null> {
+  const apiKey = process.env.FIRECRAWL_API_KEY
+  if (!apiKey) return null
+  try {
+    const res = await fetch('https://api.firecrawl.dev/v2/scrape', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, formats: ['markdown', 'links'], maxAge: 0 }),
+      signal: AbortSignal.timeout(timeout),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { success: boolean; data?: { markdown?: string; metadata?: FirecrawlMetadata; links?: string[] } }
+    if (!data.success || !data.data) return null
+    const markdown = (data.data.markdown ?? '').replace(/!\[.*?\]\(.*?\)\n?/g, '')
+    return { markdown, metadata: data.data.metadata ?? {}, links: data.data.links ?? [] }
+  } catch {
+    return null
+  }
+}
+
+function filterSameDomainLinks(links: string[], baseUrl: string): string[] {
+  const baseHost = new URL(baseUrl).hostname.replace(/^www\./, '')
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const link of links) {
+    try {
+      const u = new URL(link)
+      if (u.hostname.replace(/^www\./, '') !== baseHost) continue
+      if (/\.(pdf|zip|png|jpg|jpeg|gif|svg|webp|ico|css|js|xml|txt)$/i.test(u.pathname)) continue
+      const normalized = u.origin + (u.pathname.replace(/\/$/, '') || '/')
+      if (seen.has(normalized)) continue
+      seen.add(normalized)
+      result.push(normalized)
+    } catch { continue }
+  }
+  return result
+}
+
+function metadataFromFirecrawl(meta: FirecrawlMetadata, markdown: string): PageMetadata {
+  const h1s = markdown.split('\n')
+    .filter(line => /^# /.test(line))
+    .map(line => line.replace(/^# /, '').trim())
+    .slice(0, 3)
+  const wordCount = markdown.split(/\s+/).filter(w => w.length > 2).length
+  return {
+    title: meta.title ?? null,
+    metaDescription: meta.description ?? null,
+    canonical: meta.canonical ?? meta.sourceURL ?? null,
+    h1s,
+    wordCount,
+    hasStructuredData: false,
+    hasOgTags: 'og:title' in meta || 'og:description' in meta,
+    metaRobots: meta.robots ?? null,
+    generator: meta.generator ?? null,
+  }
+}
+
 function extractLinks(html: string, baseUrl: string): string[] {
   const base = new URL(baseUrl)
   // Normalize: strip www for comparison so www.example.com and example.com are treated as same site
@@ -175,10 +253,15 @@ function selectInteriorPages(links: string[], maxPages = 3): Array<{ url: string
 }
 
 async function fetchInteriorPage(url: string): Promise<{ content: string; chars: number; status: 'fetched' | 'timeout' | 'error' }> {
+  const fc = await firecrawlFetch(url, 8000)
+  if (fc) {
+    const truncated = fc.markdown.slice(0, 3000)
+    return { content: truncated, chars: truncated.length, status: 'fetched' }
+  }
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MarketingAuditBot/1.0)' },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(8000),
     })
     if (!response.ok) {
       return { content: '', chars: 0, status: 'error' }
@@ -260,6 +343,15 @@ async function fetchPageContent(url: string): Promise<{ content: string; metadat
     title: null, metaDescription: null, canonical: null,
     h1s: [], wordCount: 0, hasStructuredData: false, hasOgTags: false, metaRobots: null,
   }
+
+  const fc = await firecrawlFetch(url, 10000)
+  if (fc) {
+    const content = fc.markdown.slice(0, 15000)
+    const metadata = metadataFromFirecrawl(fc.metadata, fc.markdown)
+    const links = filterSameDomainLinks(fc.links, url)
+    return { content, metadata, links }
+  }
+
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MarketingAuditBot/1.0)' },
@@ -395,7 +487,7 @@ async function runAgent(
 
 URL: ${url}
 ${additionalContext ? `\n${additionalContext}\n` : ''}
-Page HTML content:
+Page content:
 ${pageContent}
 
 Provide your analysis as a JSON object only. No explanation, no markdown, no code blocks — just the raw JSON.`
@@ -841,25 +933,10 @@ export async function GET(request: Request) {
       const durationMs = Date.now() - startTime
       const model = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
       const scores = Object.fromEntries(results.map(({ key, result }) => [key, ((result.score as number) || 0)]))
-      send({
-        type: 'complete',
-        auditId,
-        compositeScore,
-        scores,
-        pageSpeed,
-        usage: {
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-          totalTokens: totalInputTokens + totalOutputTokens,
-          costUsd: parseFloat(((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)),
-        },
-        durationMs,
-        model,
-      })
 
-      // Await the log write so the Edge function doesn't terminate before /api/log
-      // completes its Neon INSERT. The browser already has the `complete` event —
-      // the stream physically closing a second later is invisible to the user.
+      // Write Neon BEFORE sending complete — ensures the report page has full data
+      // the moment the browser navigates to it. The user's experience is unchanged
+      // since the audit has already been running for 30+ seconds.
       await writeAuditLog(origin, {
         id: auditId,
         timestamp: new Date().toISOString(),
@@ -883,6 +960,22 @@ export async function GET(request: Request) {
         })),
         summary: summaryResult,
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
+      })
+
+      send({
+        type: 'complete',
+        auditId,
+        compositeScore,
+        scores,
+        pageSpeed,
+        usage: {
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          totalTokens: totalInputTokens + totalOutputTokens,
+          costUsd: parseFloat(((totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000).toFixed(4)),
+        },
+        durationMs,
+        model,
       })
 
       await notifyDiscord({ name, company, url: targetUrl, reportUrl: `${origin}/audit/${auditId}`, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })

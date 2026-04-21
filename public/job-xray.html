@@ -1026,7 +1026,7 @@ function renderInspector(data) {
                     const cardId = `agent-${ag.key}-${Date.now()}`;
 
                     const signalPills = [
-                        ['HTML', sig.html],
+                        ['Page Content', sig.html],
                         ['PageSpeed', sig.pagespeed],
                         ['GSC', sig.gsc],
                         ['GA4', sig.ga4],
@@ -1065,7 +1065,7 @@ function renderInspector(data) {
                                     <div class="brief-stat"><span class="brief-stat-label">~Tokens (input): </span><span class="brief-stat-val">${fmt(ag.inputTokens) !== '—' ? fmt(ag.inputTokens) : '~'+approxTok.toLocaleString()}</span></div>
                                 </div>
                                 <div class="brief-signals">${signalPills}</div>
-                                <pre class="brief-pre">${esc(ag.userMessage || '')}</pre>
+                                <div class="context-md">${marked.parse(ag.userMessage || '')}</div>
                             </div>
                             <div class="tab-panel" data-tab="json" data-card="${cardId}">
                                 <pre class="json-pre">${highlightJson(ag.result||{})}</pre>

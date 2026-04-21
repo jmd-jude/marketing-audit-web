@@ -617,14 +617,22 @@ function BiggestLever({ lever }: { lever: string }) {
 function StickyBar({
   activeSection,
   onNav,
+  url,
 }: {
   activeSection: string
   onNav: (id: string) => void
+  url: string
 }) {
+  const hostname = (() => {
+    try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '') }
+    catch { return url }
+  })()
+
   return (
     <div className="sticky top-[57px] z-20 bg-white border-b border-[#E8E4DC] shadow-sm">
-      <div className="max-w-[900px] mx-auto px-6 h-12 flex items-center">
-        <div className="mx-auto flex items-center gap-0.5 overflow-x-auto">
+      <div className="max-w-[900px] mx-auto px-6 h-12 flex items-center gap-4">
+        <span className="flex-shrink-0 text-sm font-medium text-[#6B6560] truncate max-w-[200px]">{hostname}</span>
+        <div className="flex-1 flex items-center justify-center gap-0.5 overflow-x-auto">
           {NAV_SECTIONS.map(({ id, label }) => (
             <button
               key={id}
@@ -678,6 +686,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
         <StickyBar
           activeSection={activeSection}
           onNav={navTo}
+          url={data.url ?? ''}
         />
       )}
 

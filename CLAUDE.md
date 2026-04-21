@@ -25,7 +25,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `app/page.tsx` | Single-page UI — landing, simplified progress state, teaser-only done state (score + verdict + top 3 priorities + "full report coming" close) |
 | `app/audit/[id]/page.tsx` | Server component — fetches audit row from Neon by UUID, passes to client |
 | `app/audit/[id]/AuditReport.tsx` | Client component — renders shareable report page (canonical full-report destination) |
-| `app/api/audit/route.ts` | Edge API route — fetches HTML + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
+| `app/api/audit/route.ts` | Edge API route — fetches page content via Firecrawl (or raw HTML fallback) + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
 | `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
 | `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data (domain rank overview + competitors), returns formatted context strings |
@@ -39,6 +39,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `scripts/setup-db.ts` | One-time Neon table creation |
 | `scripts/test-dataforseo.ts` | Utility for debugging DataForSEO API calls |
 | `logs/viewer.html` | Internal audit explorer — load audit-data.jsonl to page through runs |
+| `public/job-xray.html` | Internal per-agent inspector — tabs for Analyst Job, Data In (rendered markdown), Raw Output, Formatted Report |
 | `product-docs/ROADMAP.md` | Product backlog and tier model |
 | `product-docs/ARCHITECTURE.md` | System architecture diagrams — current state, full vision, and direct mail parallel |
 
@@ -46,15 +47,16 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 
 1. User enters name, company (optional), and URL → `GET /api/audit?url=...&name=...&company=...`
 2. Discord **start ping** fires immediately (name + company + URL)
-3. API fetches page HTML (truncated to 15k chars), Google PageSpeed data, robots.txt/sitemap, GSC/GA4 via `/api/connected-data`, and DataForSEO competitive data via `/api/competitive-data` — all in parallel
-4. Page metadata extracted from raw HTML before stripping (title, meta description, canonical, H1s, word count, structured data, OG tags)
-4a. Links extracted from raw homepage HTML; up to 3 interior pages selected by `PAGE_CONFIG` scoring and fetched in parallel (4s timeout, 3k char truncation each). Each page is routed to the agents it benefits — technical agent receives none.
+3. API fetches page content via Firecrawl (returns clean markdown + structured metadata; falls back to raw HTML fetch if `FIRECRAWL_API_KEY` is unset), Google PageSpeed data, robots.txt/sitemap, GSC/GA4 via `/api/connected-data`, and DataForSEO competitive data via `/api/competitive-data` — all in parallel
+4. Page metadata extracted: title, description, OG tags, canonical, H1s (parsed from markdown), word count, generator field (e.g. "Wix.com Website Builder"). With Firecrawl this comes from the structured metadata response; without it, regex against raw HTML.
+4a. Links extracted from Firecrawl's `links` array (same-domain filtered) or regex against raw HTML. Up to 3 interior pages selected by `PAGE_CONFIG` scoring and fetched in parallel (8s timeout, 3k char truncation each). Each page is routed to the agents it benefits — technical agent receives none.
 5. 5 Claude API calls fire simultaneously. DataForSEO `rankContext` → technical + strategy agents. DataForSEO `competitorsContext` → competitive + strategy agents.
 6. Results stream back to the browser via SSE (`text/event-stream`)
 7. `page.tsx` renders a simplified progress state (spinner + status + "N of 5 complete" bar). No live agent cards.
-8. On `complete`, `page.tsx` shows teaser: score, overall verdict, top 3 priorities (findings + impact only, no actions). A "full report ready" card closes the page.
-9. Discord **completion embed** fires with score + tokens + a direct link to `/audit/{id}` for Jude to review and share
-10. Full report lives at `/audit/[id]` — server-rendered from Neon, shareable URL. Jude sends this link to the prospect at his timing.
+8. `writeAuditLog` (Neon INSERT) runs and completes **before** the `complete` SSE event is sent — ensures the report page has full data the moment the browser navigates to it.
+9. On `complete`, `page.tsx` shows teaser: score, overall verdict, top 3 priorities (findings + impact only, no actions). A "full report ready" card closes the page.
+10. Discord **completion embed** fires with score + tokens + a direct link to `/audit/{id}` for Jude to review and share
+11. Full report lives at `/audit/[id]` — server-rendered from Neon, shareable URL. Jude sends this link to the prospect at his timing.
 
 ## Agent Weights
 
@@ -81,6 +83,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | Connected tier | Full JSON key file contents (paste as one line). Service account in GCP `marketing-audit` project. |
 | `DATAFORSEO_LOGIN` | Professional tier | DataForSEO API login (from dashboard, not account password). |
 | `DATAFORSEO_PASSWORD` | Professional tier | DataForSEO API password. |
+| `FIRECRAWL_API_KEY` | Recommended | Firecrawl API key. When set, replaces raw HTML fetch with clean markdown + structured metadata for homepage and interior pages. Falls back to raw fetch if unset. |
 
 ## Development
 
@@ -96,7 +99,7 @@ npx tsx scripts/test-dataforseo.ts  # debug DataForSEO API calls
 
 The `DataSourcesPanel` component exists in `components/DataSourcesPanel.tsx` but is not currently rendered anywhere — the tier/upsell framing has been deprioritized. Data source provenance is surfaced lightly in the report via the "What We Analyzed" section instead.
 
-**Standard:** Page HTML + PageSpeed Insights — always runs, no auth  
+**Standard:** Page content (Firecrawl markdown when key present, raw HTML fallback) + PageSpeed Insights — always runs, no auth  
 **Connected (shipped):** GA4 + Search Console via service account — always-on, no session required. Data loads automatically when access has been granted.  
 **Professional (shipped — Labs only):** DataForSEO domain rank overview + competitors domain via `/api/competitive-data`. `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Backlinks API deprioritized (requires $100 minimum commitment). Graceful degradation if credentials missing.  
 **Agency (roadmap):** SEMrush/Ahrefs, Klaviyo, Meta Ads API  
@@ -118,17 +121,18 @@ See `product-docs/ROADMAP.md` for full backlog.
 - Agent system prompts live in `lib/agents.ts` — this is the primary tuning surface. Adjusting prompt language, scoring rubrics, and output structure happens here.
 - The API route (`app/api/audit/route.ts`) handles all data fetching and orchestration. Agent prompts should not contain fetch logic — context is passed in via `additionalContext` parameter.
 - All agent output is JSON only — prompts explicitly instruct the model not to wrap in markdown. The route strips fences defensively.
-- PageSpeed data is passed only to the technical agent. Other agents receive HTML only.
+- PageSpeed data is passed only to the technical agent. Other agents receive page content only.
+- Page content passed to agents is clean markdown when Firecrawl is active, stripped HTML otherwise. The user message label is "Page content:" (not "Page HTML content:") in both cases.
 - Interior page content is routed per `PAGE_CONFIG` in `route.ts` — pricing/contact go to conversion+competitive, about goes to strategy+content, services goes to competitive+content+strategy. Technical agent intentionally excluded. Content injected as `## Interior Page: /path` sections in `additionalContext`.
-- Interior page fetches use `Promise.allSettled` with a 4s timeout per page. A timeout or error on any page doesn't fail the audit — that page simply doesn't contribute. Zero interior pages is a valid outcome (JS-rendered navs, no pattern matches).
+- Interior page fetches use `Promise.allSettled` with an 8s timeout per page (bumped from 4s to accommodate Firecrawl headless rendering). A timeout or error on any page doesn't fail the audit — that page simply doesn't contribute. Zero interior pages is a valid outcome.
 - `pagesAnalyzed` is included in the `fetched` SSE event and in the `writeAuditLog` payload (queryable via `payload->'pagesAnalyzed'` in Postgres). The Data Sources panel surfaces fetched page paths when expanded.
-- www/non-www mismatch in hrefs is handled in `extractLinks` — both sides are normalized by stripping `www.` before comparing hostnames.
+- www/non-www mismatch in hrefs is handled in `filterSameDomainLinks` (Firecrawl path) and `extractLinks` (fallback path) — both normalize by stripping `www.` before comparing hostnames.
 - Discord has two events: `notifyDiscordStart` (fires before fetch, includes name + company + URL) and `notifyDiscord` (fires after completion, includes score + tokens). Both are fire-and-forget — never block the SSE stream on either.
 - The audit route always calls `/api/connected-data?siteUrl=...` before launching agents. The response is `{ gscContext: string | null, ga4Context: string | null }`. GSC context goes to `technical`, `strategy`, `competitive`, `content` agents. GA4 context goes to all five.
 - Token usage is tracked per-agent via `message.usage` and aggregated into the `complete` SSE event. Displayed in the run stats bar and Discord embed.
-- `extractPageMetadata` runs on raw HTML before stripping — must run before `fetchPageContent` strips scripts/styles or metadata regex will still work but word count will be inflated by JS. Currently correct: metadata extracted inside `fetchPageContent` on the raw response.
+- `extractPageMetadata` is used only on the raw HTML fallback path. On the Firecrawl path, `metadataFromFirecrawl` maps the Firecrawl metadata response to `PageMetadata` — H1s are parsed from markdown headings, word count from the markdown body, `generator` field carries CMS detection (e.g. "Wix.com Website Builder").
 - Name and company are passed as query params (`?name=&company=`). Company is optional; name is required by the UI but defaults to `'Unknown'` server-side if missing.
-- Every completed audit is persisted to Neon Postgres via a fire-and-forget POST to `/api/log`. The `complete` SSE event includes `auditId` (UUID). The log route writes to JSONL file + Postgres in parallel.
+- Every completed audit is persisted to Neon Postgres via `writeAuditLog`. This runs **before** the `complete` SSE event fires so the report page always has full data on first load. The log route writes to JSONL file + Postgres.
 - Gate model on `/audit/[id]`: free zone (score, assessment, provenance, all 5 findings without action steps) is always visible. Full report (priority actions, quick wins, agent deep-dives in tabs) requires unlock. Unlock is triggered by `?full=1` in the URL — operator sends `https://…/audit/[id]?full=1` to the prospect after receiving their email via Discord. Email capture fires `POST /api/gate` which pings Discord with email + the pre-built `?full=1` URL. Prospect sees a confirmation state ("We'll send your report shortly") — not instant unlock.
 - `INVITE_CODES` (server-side) still gates running an audit. `NEXT_PUBLIC_UNLOCK_CODES` is deprecated and unused.
 - `/sample` page renders a full unlocked report for `SAMPLE_AUDIT_ID`. Linked from the gate card so free-zone viewers can see what the full report looks like before requesting their own.
@@ -138,5 +142,6 @@ See `product-docs/ROADMAP.md` for full backlog.
 - Do not change `export const runtime = 'edge'` in the API route — SSE streaming requires edge runtime on Vercel
 - Do not add server-side state or database calls to the API route without confirming Vercel Edge compatibility
 - Do not hardcode model names — always read from `process.env.ANTHROPIC_MODEL`
-- Do not increase the HTML truncation limit (currently 15k chars) without load-testing token costs — 5 parallel calls amplify fast
-- Do not increase the interior page truncation limit (currently 3k chars) without considering that up to 3 pages are routed to up to 4 agents simultaneously — cost amplifies fast
+- Do not increase the homepage content truncation limit (currently 15k chars) without load-testing token costs — 5 parallel calls amplify fast
+- Do not increase the interior page truncation limit (currently 3k chars) without considering that up to 3 pages are routed to up to 4 agents simultaneously — cost amplifies fast. Firecrawl markdown is denser signal than stripped HTML so the limit is more meaningful now, but still enforce it.
+- Do not set `maxAge` > 0 on Firecrawl calls — a cached page from 2 days ago would silently produce stale audit results
