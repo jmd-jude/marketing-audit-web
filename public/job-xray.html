@@ -575,10 +575,12 @@ function renderRevenue(rev) {
         if (!Array.isArray(items) || !items.length) return '';
         return `<div style="margin-bottom:0.65rem">
             <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:0.3rem;border-bottom:1px solid var(--card-border);padding-bottom:0.2rem">${label}</div>
-            ${items.map(i=>`<div style="display:flex;gap:0.5rem;font-size:0.77rem;margin-bottom:0.25rem;align-items:baseline">
-                <span style="font-size:0.63rem;font-weight:700;padding:0.1rem 0.35rem;border-radius:4px;background:var(--tag-bg);color:var(--muted);flex-shrink:0">${esc(i.effort)}</span>
-                <span>${esc(i.opportunity)}</span>
-                ${i.impact ? `<span style="font-size:0.7rem;color:var(--muted);flex-shrink:0">${esc(i.impact)}</span>` : ''}
+            ${items.map(i=>`<div style="display:flex;gap:0.5rem;font-size:0.77rem;margin-bottom:0.25rem;align-items:flex-start">
+                <span style="font-size:0.63rem;font-weight:700;padding:0.1rem 0.35rem;border-radius:4px;background:var(--tag-bg);color:var(--muted);flex-shrink:0;margin-top:0.15rem">${esc(i.effort)}</span>
+                <div>
+                    <div>${esc(i.opportunity)}</div>
+                    ${i.impact ? `<div style="font-size:0.7rem;margin-top:0.15rem"><span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-right:0.35rem;background:var(--tag-bg);color:var(--muted);padding:0.1rem 0.35rem;border-radius:4px;">Impact</span>${esc(i.impact)}</div>` : ''}
+                </div>
             </div>`).join('')}
         </div>`;
     }
