@@ -85,6 +85,8 @@ Complete these steps before scoring any dimension.
 
 **Step 4: Customer language check.** Identify whether the page uses customer language (how a real buyer describes their own problem) or company language (how the company describes its product). "You're losing 70% of people who add to cart before checkout" is customer language. "We help e-commerce brands reduce cart abandonment" is company language. Same reality, different effect. Flag the gap when it's present.
 
+**Step 5: biggest_lever identification.** Identify the single messaging or copy change that would have the most impact on how visitors understand and respond to this page. Not a list of fixes — one specific change, and the reason it outranks everything else you found.
+
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
 
 ## Scoring Dimensions
@@ -140,7 +142,11 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
   "critical_fixes": ["<Issue> → <Specific recommendation>", "<Issue> → <Specific recommendation>", "<Issue> → <Specific recommendation>"],
   "before_after": [
     {"element": "<Page - Element>", "before": "<current copy>", "after": "<improved copy>", "why": "<explanation>"}
-  ]
+  ],
+  "biggest_lever": {
+    "recommendation": "<single most impactful messaging or copy change>",
+    "why": "<why this change over everything else you found>"
+  }
 }${VOICE_INSTRUCTIONS}`,
   },
   {
@@ -162,7 +168,7 @@ Name the primary failure mode. The remedies are categorically different and the 
 
 **Step 2: Skeptic's read.** Evaluate social proof not by whether it exists, but by whether it would move a skeptic who has been burned by a product or service in this category before. "Trusted by thousands" is not social proof. "We reduced customer acquisition cost by 40% in 90 days — [Company]" is. For each credibility claim, ask: is this specific and verifiable enough to change a skeptic's prior? Flag unearned claims explicitly.
 
-**Step 3: Lead finding.** Before writing critical_fixes, identify the single change that would make the most difference to conversion. State it first.
+**Step 3: biggest_lever identification.** Before writing critical_fixes, identify the single change that would make the most difference to conversion. This becomes the biggest_lever — state it first in critical_fixes, and capture it separately with an explicit reason it outranks the others.
 
 If GA4 data is included in the context, use it directly:
 - Conversions by channel: use actual CVR% per channel. A channel with high sessions but 0% CVR is a priority finding.
@@ -226,7 +232,11 @@ Return ONLY a JSON object (no markdown, no code blocks):
   "quick_wins": ["<Specific change with expected impact>", "<Specific change>", "<Specific change>"],
   "ab_tests": [
     {"hypothesis": "If we <change>, then <metric> will <improve> because <reason>", "metric": "<what to measure>", "impact": "<estimate>"}
-  ]
+  ],
+  "biggest_lever": {
+    "recommendation": "<single change that would most improve conversion>",
+    "why": "<why this over the other fixes you identified>"
+  }
 }${VOICE_INSTRUCTIONS}`,
   },
   {
@@ -252,6 +262,8 @@ Claims that fail either filter are undifferentiated. Flag them specifically. Und
 **Step 4: GSC query lens (when data is available).** If GSC query data is provided, check for comparison and alternative search terms ("X vs Y," "best X for Y," "X alternative"). Presence or absence of these queries is direct evidence of how the market positions this company in evaluation contexts.
 
 **Step 5: DataForSEO competitive lens (when data is available).** If DataForSEO competitor data is provided, use actual traffic estimates and keyword overlap counts rather than inferring competitors from HTML alone. The 'intersections' count (shared keywords) is the strongest signal for how directly two domains compete. Higher traffic with more shared keywords means a more direct threat. Use real domains from this data to populate 'likely_competitors', and reference the traffic gap or parity in your findings.
+
+**Step 6: biggest_lever identification.** Identify the single positioning or competitive action that would most change how comparison-stage buyers evaluate this company. Not a list — one move, and the specific reason it outranks the other opportunities you found.
 
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
 
@@ -306,7 +318,11 @@ Return ONLY a JSON object (no markdown, no code blocks):
   "opportunities": [
     {"title": "<Opportunity Name>", "description": "<Description + specific action>"}
   ],
-  "recommended_actions": ["<action item>", "<action item>", "<action item>"]
+  "recommended_actions": ["<action item>", "<action item>", "<action item>"],
+  "biggest_lever": {
+    "recommendation": "<single most impactful positioning or competitive move>",
+    "why": "<why this over the other opportunities you identified>"
+  }
 }${VOICE_INSTRUCTIONS}`,
   },
   {
@@ -334,6 +350,8 @@ If indexation is compromised, flag it as Critical and note that all downstream S
 Name the likely cause category in your finding, not just the metric value. You have real data — use it.
 
 **Step 2: Discoverability intent read.** After evaluating individual signals, step back and assess discoverability intent as a whole. A site with a weak title, no H1, no schema, and no tracking isn't missing three boxes — it's a site where no one has thought systematically about organic discoverability. State that directly when it's true.
+
+**Step 3: biggest_lever identification.** Identify the single technical or SEO fix that would have the most impact on this site's discoverability and performance. One specific change, and the reason it outranks the other issues you found.
 
 You will receive REAL Google PageSpeed Insights data alongside the page HTML. Use the real Lighthouse scores and Core Web Vitals measurements directly — do not estimate or guess these numbers.
 
@@ -410,7 +428,11 @@ Return ONLY a JSON object (no markdown, no code blocks):
     {"tool": "Tag Manager", "present": <true|false>, "notes": "<details>"},
     {"tool": "Meta Pixel", "present": <true|false>, "notes": "<details>"},
     {"tool": "Cookie Consent", "present": <true|false>, "notes": "<details>"}
-  ]
+  ],
+  "biggest_lever": {
+    "recommendation": "<single most impactful technical or SEO fix>",
+    "why": "<why this over the other issues you found>"
+  }
 }${VOICE_INSTRUCTIONS}`,
   },
   {
@@ -436,7 +458,7 @@ Name the mismatch when it's present. This is a strategic finding, not an executi
 
 **Step 2: Retention signal read.** Assess whether the site acknowledges that customers have a life after first conversion. Look for: newsletter or content subscription, community signals, upgrade paths, help/onboarding content visible from the homepage. Retention infrastructure is almost always underdeveloped relative to acquisition on SMB and mid-market sites — note its absence when present.
 
-**Step 3: biggest_lever identification.** The biggest_lever field is the primary deliverable of this analysis. Identify the single strategic change — not a copy tweak or a missing page, but a structural shift in how this company's marketing is architected — that would change the trajectory. Write it as a specific, actionable recommendation.
+**Step 3: biggest_lever identification.** The biggest_lever field is the primary deliverable of this analysis. Identify the single strategic change — not a copy tweak or a missing page, but a structural shift in how this company's marketing is architected — that would change the trajectory. Write it as a specific, actionable recommendation, and state explicitly why this change outranks the other strategic gaps you identified.
 
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
 
@@ -490,7 +512,10 @@ Return ONLY a JSON object (no markdown, no code blocks):
     "medium_term": [{"opportunity": "<action>", "effort": "Medium", "impact": "<estimate>"}],
     "strategic": [{"opportunity": "<action>", "effort": "High", "impact": "<estimate>"}]
   },
-  "biggest_lever": "<single most impactful strategic change>"
+  "biggest_lever": {
+    "recommendation": "<single most impactful strategic change>",
+    "why": "<why this structural shift over the other gaps you identified>"
+  }
 }${VOICE_INSTRUCTIONS}`,
   },
 ]
