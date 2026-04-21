@@ -15,15 +15,6 @@ const AGENT_LABELS: Record<string, string> = {
 
 const AGENT_ORDER = ['content', 'conversion', 'technical', 'strategy', 'competitive']
 
-const NAV_SECTIONS = [
-  { id: 'section-recommendations', label: 'Overview' },
-  { id: 'section-content',         label: 'Content' },
-  { id: 'section-conversion',      label: 'Conversion' },
-  { id: 'section-technical',       label: 'SEO & Technical' },
-  { id: 'section-strategy',        label: 'Strategy' },
-  { id: 'section-competitive',     label: 'Competitive' },
-]
-
 function scoreColor(s: number) {
   if (s >= 75) return 'text-emerald-700'
   if (s >= 55) return 'text-amber-600'
@@ -36,7 +27,6 @@ function scoreBg(s: number) {
   return 'bg-red-50 border-red-200'
 }
 
-
 function dimColor(s: number) {
   if (s >= 7) return 'bg-emerald-500'
   if (s >= 4) return 'bg-amber-400'
@@ -47,6 +37,28 @@ function formatDate(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   })
+}
+
+function detectAgentSources(userMessage: string): string[] {
+  if (!userMessage) return ['Page content']
+  const m = userMessage.toLowerCase()
+  const sources: string[] = ['Page content']
+  if (m.includes('search console') || m.includes('impressions') || m.includes('clicks')) {
+    sources.push('Search Console')
+  }
+  if (m.includes('google analytics') || m.includes('ga4') || m.includes('sessions') || m.includes('pageviews')) {
+    sources.push('Google Analytics')
+  }
+  if (m.includes('pagespeed') || m.includes('lighthouse') || m.includes('core web vitals')) {
+    sources.push('PageSpeed Insights')
+  }
+  if (m.includes('dataforseo') || m.includes('domain rank') || m.includes('competitor domain')) {
+    sources.push('Competitive data')
+  }
+  if (m.includes('## interior page')) {
+    sources.push('Interior pages')
+  }
+  return sources
 }
 
 // ─── small primitives ────────────────────────────────────────────────────────
@@ -74,21 +86,7 @@ function SevBadge({ sev }: { sev: string }) {
   )
 }
 
-function DocSectionTitle({ title, score }: { title: string; score?: number }) {
-  return (
-    <div className="flex items-baseline justify-between pb-3 border-b border-[#E8E4DC] mb-5">
-      <h2 className="font-serif text-lg font-semibold text-[#1A1918]">{title}</h2>
-      {score != null && (
-        <div className="flex items-baseline gap-1.5">
-          <span className={`text-2xl font-black tabular-nums ${scoreColor(score)}`}>{score}</span>
-          {/* <span className={`text-xs font-medium ${scoreColor(score)}`}>{scoreLabel(score)}</span> */}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── free zone sections ───────────────────────────────────────────────────────
+// ─── score strip ─────────────────────────────────────────────────────────────
 
 function AgentScoreStrip({ agents }: { agents: D[] }) {
   const ordered = AGENT_ORDER
@@ -111,26 +109,32 @@ function AgentScoreStrip({ agents }: { agents: D[] }) {
   )
 }
 
-function WhatWeAnalyzed({ data }: { data: D }) {
-  const parts: string[] = []
+// ─── data sources block (prospect-facing) ────────────────────────────────────
 
-  parts.push('Homepage HTML')
-  if (data.pagesAnalyzed?.length) {
-    parts.push(`${data.pagesAnalyzed.length} interior page${data.pagesAnalyzed.length !== 1 ? 's' : ''}`)
+function DataSourcesBlock({ data }: { data: D }) {
+  const pills: string[] = ['Page content']
+
+  const techAgent = data.agents?.find((a: D) => a.key === 'technical')
+  if (techAgent?.result?.pagespeed) pills.push('PageSpeed Insights')
+
+  if (data.connected) {
+    pills.push('Search Console')
+    pills.push('Google Analytics')
   }
-  if (data.connected) parts.push('Google Search Console + GA4')
 
-  const hasCompetitive = data.agents?.find((a: D) => a.key === 'competitive')?.result?.likely_competitors?.length
-  if (hasCompetitive) parts.push('Competitive intelligence')
+  const fetchedPages = (data.pagesAnalyzed ?? []).filter((p: D) => p.status === 'fetched')
+  if (fetchedPages.length > 0) {
+    pills.push(`${fetchedPages.length} interior page${fetchedPages.length !== 1 ? 's' : ''}`)
+  }
 
-  const hasPageSpeed = data.agents?.find((a: D) => a.key === 'technical')?.result?.pagespeed
-  if (hasPageSpeed) parts.push('PageSpeed Insights')
+  const compAgent = data.agents?.find((a: D) => a.key === 'competitive')
+  if (compAgent?.result?.likely_competitors?.length) pills.push('Competitor intelligence')
 
   return (
-    <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-      <SectionLabel>What We Analyzed</SectionLabel>
+    <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-4">
+      <SectionLabel>Data Sources</SectionLabel>
       <div className="flex flex-wrap gap-2">
-        {parts.map((p) => (
+        {pills.map((p) => (
           <span
             key={p}
             className="text-xs font-medium bg-[#F0EDE8] text-[#4A4540] px-2.5 py-1 rounded-full"
@@ -142,6 +146,8 @@ function WhatWeAnalyzed({ data }: { data: D }) {
     </div>
   )
 }
+
+// ─── free zone sections ───────────────────────────────────────────────────────
 
 function TopFindings({ priorities }: { priorities: D[] }) {
   if (!priorities.length) return null
@@ -262,7 +268,7 @@ function GateCard({
   )
 }
 
-// ─── gated zone sections ──────────────────────────────────────────────────────
+// ─── unlocked summary sections ────────────────────────────────────────────────
 
 function PriorityActions({ priorities }: { priorities: D[] }) {
   const withActions = priorities.filter((p) => p.action)
@@ -312,7 +318,25 @@ function QuickWins({ wins }: { wins: string[] }) {
   )
 }
 
-// ─── agent deep-dive sections ─────────────────────────────────────────────────
+// ─── agent card content sections ──────────────────────────────────────────────
+
+function BiggestLever({ lever }: { lever: D | string }) {
+  if (!lever) return null
+  const isObj = typeof lever === 'object' && lever !== null
+  const recommendation = isObj ? lever.recommendation : lever
+  const why = isObj ? lever.why : null
+  if (!recommendation) return null
+
+  return (
+    <div className="rounded-xl border-2 border-[#BFCFE8] bg-[#EEF2F8] px-5 py-4">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-[#2D4A6E] mb-2">Biggest Lever</div>
+      <p className="text-sm font-semibold text-[#1A1918] leading-relaxed">{recommendation}</p>
+      {why && (
+        <p className="text-xs text-[#4A6A8E] mt-2 leading-relaxed">{why}</p>
+      )}
+    </div>
+  )
+}
 
 function Dimensions({ dims }: { dims: D[] }) {
   if (!dims?.length) return null
@@ -599,55 +623,87 @@ function RevenueOpportunities({ rev }: { rev: D }) {
   )
 }
 
-function BiggestLever({ lever }: { lever: string }) {
-  if (!lever) return null
-  return (
-    <div className="space-y-2">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690]">Biggest Lever</div>
-      <div className="bg-[#EEF2F8] border border-[#BFCFE8] rounded-lg px-4 py-3 text-sm text-[#1A1918] leading-relaxed">
-        {lever}
-      </div>
-    </div>
-  )
-}
+// ─── collapsible agent card ───────────────────────────────────────────────────
 
-
-// ─── sticky nav bar (unlocked only) ──────────────────────────────────────────
-
-function StickyBar({
-  activeSection,
-  onNav,
-  url,
-}: {
-  activeSection: string
-  onNav: (id: string) => void
-  url: string
-}) {
-  const hostname = (() => {
-    try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '') }
-    catch { return url }
-  })()
+function AgentCard({ agent, open, onToggle }: { agent: D; open: boolean; onToggle: () => void }) {
+  const r: D = agent.result ?? {}
+  const sources = detectAgentSources(agent.userMessage ?? '')
+  const label = AGENT_LABELS[agent.key] ?? agent.key
 
   return (
-    <div className="sticky top-[57px] z-20 bg-white border-b border-[#E8E4DC] shadow-sm">
-      <div className="max-w-[900px] mx-auto px-6 h-12 flex items-center gap-4">
-        <span className="flex-shrink-0 text-sm font-medium text-[#6B6560] truncate max-w-[200px]">{hostname}</span>
-        <div className="flex-1 flex items-center justify-center gap-0.5 overflow-x-auto">
-          {NAV_SECTIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => onNav(id)}
-              className={`flex-shrink-0 text-sm px-3 py-1.5 rounded-md transition-colors ${
-                activeSection === id
-                  ? 'bg-[#EEF2F8] text-[#2D4A6E] font-bold'
-                  : 'text-[#9C9690] hover:text-[#1A1918]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+    <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full px-6 py-4 flex items-center justify-between gap-4 text-left hover:bg-[#FAFAF8] transition-colors"
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <span className={`flex-shrink-0 text-2xl font-black tabular-nums ${scoreColor(agent.score)}`}>
+            {agent.score}
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-[#1A1918]">{label}</div>
+          </div>
         </div>
-      </div>
+        <div className={`flex-shrink-0 text-[#9C9690] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 4.5L7 9.5L12 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-[#E8E4DC] px-6 py-6 space-y-6">
+
+          {/* Data In */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#9C9690] mb-2">Data In</div>
+            <div className="flex flex-wrap gap-1.5">
+              {sources.map((s) => (
+                <span key={s} className="text-[11px] font-medium bg-[#F0EDE8] text-[#4A4540] px-2 py-0.5 rounded-full">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Biggest lever — prominent callout */}
+          <BiggestLever lever={r.biggest_lever} />
+
+          {/* All other findings */}
+          <Dimensions dims={r.dimensions} />
+          <StringList items={r.wins} label="Strengths" marker="+" markerClass="text-emerald-600" />
+          <StringList items={r.critical_fixes} label="Critical Fixes" marker="!" markerClass="text-red-600" />
+          <CopyRewrites items={r.before_after} />
+          <StringList items={r.quick_wins} label="Conversion Quick Wins" marker="→" markerClass="text-emerald-600" />
+          <FunnelLeaks leaks={r.funnel_leaks} />
+          <AbTests tests={r.ab_tests} />
+          <PageSpeed ps={r.pagespeed} />
+          <StringList items={r.seo_quick_wins} label="SEO Quick Wins" marker="→" markerClass="text-emerald-600" />
+          <TechnicalIssues issues={r.technical_issues} />
+          <TrackingStatus tracking={r.tracking_status} />
+          <Competitors comps={r.likely_competitors} />
+          <Opportunities opps={r.opportunities} />
+          <StringList items={r.recommended_actions} label="Recommended Actions" marker="→" markerClass="text-[#2D4A6E]" />
+          <RevenueOpportunities rev={r.revenue_opportunities} />
+          {(r.brand_score != null || r.growth_score != null) && (
+            <div className="flex gap-6">
+              {r.brand_score != null && (
+                <div className="text-center">
+                  <div className={`text-2xl font-black tabular-nums ${scoreColor(r.brand_score)}`}>{r.brand_score}</div>
+                  <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Brand</div>
+                </div>
+              )}
+              {r.growth_score != null && (
+                <div className="text-center">
+                  <div className={`text-2xl font-black tabular-nums ${scoreColor(r.growth_score)}`}>{r.growth_score}</div>
+                  <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Growth</div>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+      )}
     </div>
   )
 }
@@ -656,7 +712,7 @@ function StickyBar({
 
 export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?: boolean }) {
   const [unlocked, setUnlocked] = useState(autoUnlock ?? false)
-  const [activeSection, setActiveSection] = useState('section-recommendations')
+  const [openAgents, setOpenAgents] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -672,53 +728,50 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
     .map((key) => agents.find((a) => a.key === key))
     .filter((a): a is D => Boolean(a))
 
-  function navTo(id: string) {
-    setActiveSection(id)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  function toggleAgent(key: string) {
+    setOpenAgents((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
-  const activeAgent = orderedAgents.find((a) => `section-${a.key}` === activeSection)
+  const scoreBlock = (
+    <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
+      <div className="px-6 py-6 flex items-center justify-between gap-6">
+        <div>
+          <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
+          <div className="text-xs text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
+        </div>
+        <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
+          <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
+            {compositeScore}
+          </div>
+          <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
+        </div>
+      </div>
+      <AgentScoreStrip agents={agents} />
+    </div>
+  )
 
   return (
     <div className="pb-12 px-4">
-
-      {unlocked && (
-        <StickyBar
-          activeSection={activeSection}
-          onNav={navTo}
-          url={data.url ?? ''}
-        />
-      )}
-
       <div className="mx-auto space-y-4 max-w-[900px] pt-8">
 
-        {/* Free state: score block, assessment, what we analyzed, findings, gate */}
+        {scoreBlock}
+
+        {summary.overall_verdict && (
+          <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+            <SectionLabel>Overall Assessment</SectionLabel>
+            <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
+          </div>
+        )}
+
+        <DataSourcesBlock data={data} />
+
         {!unlocked && (
           <>
-            <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
-              <div className="px-6 py-6 flex items-center justify-between gap-6">
-                <div>
-                  <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
-                  <div className="text-xs text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
-                </div>
-                <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
-                  <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
-                    {compositeScore}
-                  </div>
-                  <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
-                </div>
-              </div>
-              <AgentScoreStrip agents={agents} />
-            </div>
-
-            {summary.overall_verdict && (
-              <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-                <SectionLabel>Overall Assessment</SectionLabel>
-                <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
-              </div>
-            )}
-
-            <WhatWeAnalyzed data={data} />
             <TopFindings priorities={priorities} />
             <GateCard
               auditId={data.id}
@@ -728,93 +781,29 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
           </>
         )}
 
-        {/* Unlocked state: tab content */}
         {unlocked && (
-          <div className="pt-2">
+          <>
+            <PriorityActions priorities={priorities} />
+            <QuickWins wins={summary.quick_wins ?? []} />
 
-            {activeSection === 'section-recommendations' && (
-              <div className="space-y-4">
-
-                {/* Score block — re-orients the reader on open */}
-                <div className="bg-white rounded-xl border border-[#E8E4DC] overflow-hidden">
-                  <div className="px-6 py-6 flex items-center justify-between gap-6">
-                    <div>
-                      <div className="font-serif text-2xl text-[#6B6560] break-all">{data.url}</div>
-                      <div className="text-xs text-[#9C9690] mt-1">{formatDate(data.timestamp)}</div>
-                    </div>
-                    <div className={`flex-shrink-0 border-2 rounded-2xl px-6 py-4 text-center ${scoreBg(compositeScore)}`}>
-                      <div className={`text-5xl font-black tabular-nums leading-none ${scoreColor(compositeScore)}`}>
-                        {compositeScore}
-                      </div>
-                      <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-1.5">/ 100</div>
-                    </div>
-                  </div>
-                  <AgentScoreStrip agents={agents} />
-                </div>
-
-                {summary.overall_verdict && (
-                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-                    <SectionLabel>Overall Assessment</SectionLabel>
-                    <p className="text-sm text-[#1A1918] leading-relaxed">{summary.overall_verdict}</p>
-                  </div>
-                )}
-
-                <WhatWeAnalyzed data={data} />
-                <PriorityActions priorities={priorities} />
-                <QuickWins wins={summary.quick_wins ?? []} />
-                {summary.biggest_strength && (
-                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
-                    <SectionLabel>Biggest Strength</SectionLabel>
-                    <p className="text-sm text-[#1A1918] leading-relaxed">{summary.biggest_strength}</p>
-                  </div>
-                )}
+            {summary.biggest_strength && (
+              <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-5">
+                <SectionLabel>Biggest Strength</SectionLabel>
+                <p className="text-sm text-[#1A1918] leading-relaxed">{summary.biggest_strength}</p>
               </div>
             )}
 
-            {activeAgent && (() => {
-              const r: D = activeAgent.result ?? {}
-              return (
-                <div className="space-y-4">
-                  <DocSectionTitle title={AGENT_LABELS[activeAgent.key]} score={activeAgent.score} />
-                  <div className="bg-white rounded-xl border border-[#E8E4DC] px-6 py-6 space-y-6">
-                    <Dimensions dims={r.dimensions} />
-                    <StringList items={r.wins} label="Strengths" marker="+" markerClass="text-emerald-600" />
-                    <StringList items={r.critical_fixes} label="Critical Fixes" marker="!" markerClass="text-red-600" />
-                    <CopyRewrites items={r.before_after} />
-                    <StringList items={r.quick_wins} label="Conversion Quick Wins" marker="→" markerClass="text-emerald-600" />
-                    <FunnelLeaks leaks={r.funnel_leaks} />
-                    <AbTests tests={r.ab_tests} />
-                    <PageSpeed ps={r.pagespeed} />
-                    <StringList items={r.seo_quick_wins} label="SEO Quick Wins" marker="→" markerClass="text-emerald-600" />
-                    <TechnicalIssues issues={r.technical_issues} />
-                    <TrackingStatus tracking={r.tracking_status} />
-                    <Competitors comps={r.likely_competitors} />
-                    <Opportunities opps={r.opportunities} />
-                    <StringList items={r.recommended_actions} label="Recommended Actions" marker="→" markerClass="text-[#2D4A6E]" />
-                    {(r.brand_score != null || r.growth_score != null) && (
-                      <div className="flex gap-6">
-                        {r.brand_score != null && (
-                          <div className="text-center">
-                            <div className={`text-2xl font-black tabular-nums ${scoreColor(r.brand_score)}`}>{r.brand_score}</div>
-                            <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Brand</div>
-                          </div>
-                        )}
-                        {r.growth_score != null && (
-                          <div className="text-center">
-                            <div className={`text-2xl font-black tabular-nums ${scoreColor(r.growth_score)}`}>{r.growth_score}</div>
-                            <div className="text-[10px] text-[#9C9690] uppercase tracking-widest mt-0.5">Growth</div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <BiggestLever lever={r.biggest_lever} />
-                    <RevenueOpportunities rev={r.revenue_opportunities} />
-                  </div>
-                </div>
-              )
-            })()}
-
-          </div>
+            <div className="space-y-3">
+              {orderedAgents.map((agent) => (
+                <AgentCard
+                  key={agent.key}
+                  agent={agent}
+                  open={openAgents.has(agent.key)}
+                  onToggle={() => toggleAgent(agent.key)}
+                />
+              ))}
+            </div>
+          </>
         )}
 
       </div>

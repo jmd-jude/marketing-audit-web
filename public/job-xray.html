@@ -605,7 +605,12 @@ function renderAgentOutput(ag) {
     html += renderCompetitors(r.likely_competitors);
     html += renderOpps(r.opportunities);
     html += renderList(r.recommended_actions, 'bullet', 'Recommended Actions');
-    if (r.biggest_lever) html += `<div class="out-section"><div class="out-label">Biggest Lever</div><div class="lever-box">${esc(r.biggest_lever)}</div></div>`;
+    if (r.biggest_lever) {
+        const lever = r.biggest_lever;
+        const rec = typeof lever === 'object' && lever !== null ? lever.recommendation : lever;
+        const why = typeof lever === 'object' && lever !== null ? lever.why : null;
+        html += `<div class="out-section"><div class="out-label">Biggest Lever</div><div class="lever-box">${esc(rec)}${why ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.4rem">${esc(why)}</div>` : ''}</div></div>`;
+    }
     html += renderRevenue(r.revenue_opportunities);
     if (r.brand_score != null || r.growth_score != null) {
         html += `<div class="out-section"><div class="out-label">Brand &amp; Growth Scores</div>
@@ -823,8 +828,12 @@ function generateMarkdown(data) {
             push('');
         }
         if (r.biggest_lever) {
+            const lever = r.biggest_lever;
+            const rec = typeof lever === 'object' && lever !== null ? lever.recommendation : lever;
+            const why = typeof lever === 'object' && lever !== null ? lever.why : null;
             push('### Biggest Lever');
-            push(r.biggest_lever);
+            push(rec);
+            if (why) push(`*${why}*`);
             push('');
         }
         if (r.revenue_opportunities) {
