@@ -526,7 +526,8 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
 }
 
 async function runSummaryAgent(
-  agentResults: AgentRunResult[]
+  agentResults: AgentRunResult[],
+  businessContext: string | null,
 ): Promise<{ result: Record<string, unknown>; usage: { input_tokens: number; output_tokens: number } }> {
   const agentOutputs = Object.fromEntries(
     agentResults.map(({ key, result }) => {
@@ -535,7 +536,7 @@ async function runSummaryAgent(
     })
   )
 
-  const userMessage = `Here are the five agent analysis outputs for this site. Synthesize them into an executive summary.\n\n${JSON.stringify(agentOutputs, null, 2)}\n\nReturn ONLY the JSON summary object. No prose, no markdown.`
+  const userMessage = `${businessContext ? `${businessContext}\n\n` : ''}Here are the five agent analysis outputs for this site. Synthesize them into an executive summary.\n\n${JSON.stringify(agentOutputs, null, 2)}\n\nReturn ONLY the JSON summary object. No prose, no markdown.`
 
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
@@ -595,6 +596,9 @@ async function writeAuditLog(origin: string, payload: {
   }>
   summary: Record<string, unknown> | null
   summaryTokens: { input: number; output: number }
+  businessType: string
+  conversionGoal: string
+  targetCustomer: string
 }) {
   try {
     const lines: string[] = []
@@ -728,6 +732,9 @@ export async function GET(request: Request) {
   const name = searchParams.get('name') ?? 'Unknown'
   const company = searchParams.get('company') ?? ''
   const inviteCode = searchParams.get('inviteCode') ?? ''
+  const businessType = searchParams.get('businessType') ?? ''
+  const conversionGoal = searchParams.get('conversionGoal') ?? ''
+  const targetCustomer = searchParams.get('targetCustomer') ?? ''
 
   const rawCodes = process.env.INVITE_CODES
   if (rawCodes) {
@@ -749,6 +756,15 @@ export async function GET(request: Request) {
 
   const targetUrl = url.startsWith('http') ? url : `https://${url}`
   const startTime = Date.now()
+
+  const businessContextParts = businessType && conversionGoal
+    ? [
+        '## Business Context (operator-supplied)',
+        `- Business type: ${businessType}`,
+        `- Primary conversion goal: ${conversionGoal}`,
+        ...(targetCustomer ? [`- Target customer: ${targetCustomer}`] : []),
+      ].join('\n')
+    : null
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -851,7 +867,7 @@ export async function GET(request: Request) {
       const COMPETITORS_AGENTS = new Set(['competitive', 'strategy'])
 
       const promises = agentKeys.map(async (key) => {
-        const parts: (string | null)[] = []
+        const parts: (string | null)[] = [businessContextParts]
         if (key === 'technical') {
           parts.push(pageSpeed ? formatPageSpeedContext(pageSpeed) : null)
           parts.push(crawlData || null)
@@ -921,7 +937,7 @@ export async function GET(request: Request) {
       let summaryUsage = { input_tokens: 0, output_tokens: 0 }
       let summaryResult: Record<string, unknown> | null = null
       try {
-        const summary = await runSummaryAgent(results)
+        const summary = await runSummaryAgent(results, businessContextParts)
         summaryUsage = summary.usage
         summaryResult = summary.result
         send({ type: 'summary_complete', result: summary.result, usage: summary.usage })
@@ -962,6 +978,9 @@ export async function GET(request: Request) {
         })),
         summary: summaryResult,
         summaryTokens: { input: summaryUsage.input_tokens, output: summaryUsage.output_tokens },
+        businessType,
+        conversionGoal,
+        targetCustomer,
       })
 
       send({

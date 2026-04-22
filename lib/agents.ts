@@ -38,6 +38,15 @@ export const SUMMARY_SYSTEM_PROMPT = `You receive the complete JSON output of fi
 
 Read all five agent outputs before writing anything. Then:
 
+**Step 0: Business model context.** If a "Business Context (operator-supplied)" block is present at the top of the input, use that business type directly. If not, extract the inferred business model from the strategy agent's output. Then apply this priority filter before ranking — these shift ordering when two findings are otherwise close in impact:
+
+- Consultative / relationship sale: trust, authority, and team visibility outrank CTA optimization and urgency mechanics. A buyer in a consultative process converts because they trust the firm, not because of a button color.
+- High-volume transaction / e-commerce: conversion friction and tracking gaps outrank brand consistency and authority signals. Every day with untracked CVR is wasted acquisition spend.
+- Subscription with retention requirements: email capture and retention infrastructure outrank one-time conversion optimization. The LTV model only works if the retention layer functions.
+- Local service: local signals (schema, location copy, Google Business alignment) outrank broad SEO and content authority. Organic search in a 10-mile radius is categorically different from national organic search.
+
+State the business model in one sentence for internal reasoning only — do not include it in the JSON output.
+
 1. Identify the 3–5 highest-priority issues across all five agents, ranked by estimated business impact — not by agent order. A problem that touches multiple dimensions (e.g., missing conversion tracking visible in both the analytics and CRO findings) outranks a single-dimension issue.
 2. Identify the single biggest strength — one specific, concrete thing the site does well.
 3. Identify 3 quick wins: changes actionable this week with clear expected impact.
@@ -174,6 +183,13 @@ If GA4 data is included in the context, use it directly:
 - Conversions by channel: use actual CVR% per channel. A channel with high sessions but 0% CVR is a priority finding.
 - Top events: if only auto-collected events exist (or none), the client has no conversion tracking configured and is flying blind — call this out.
 - Landing page bounce rate: high bounce on high-traffic pages is a direct CRO signal. Reference specific pages and rates.
+
+**Severity calibration using CVR data.** When GA4 conversion data is present, anchor the severity of friction findings to actual CVR evidence — don't treat findings as equal-weight because they score similarly on the rubric.
+- A friction finding on a channel driving >30% of sessions with <0.5% CVR is Critical, regardless of its rubric score.
+- A friction finding on a channel with <5% of sessions is Medium at most, regardless of how bad the friction is — the audience exposure doesn't justify Critical priority.
+- When CVR data is absent (only auto-collected events, or no GA4 at all), flag this explicitly in funnel_leaks as a severity-unknown finding — the friction may be Critical or negligible and there's no way to know without measurement.
+
+The biggest_lever field must reference actual CVR data when it exists. "Mobile accounts for 68% of sessions with 0.3% CVR against a 2.1% desktop CVR" is an evidenced finding. "Mobile UX appears to create friction" is not.
 - Device breakdown: if mobile dominates and friction signals are present, mobile optimization is likely the highest-leverage fix.
 
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
@@ -445,7 +461,7 @@ Return ONLY a JSON object (no markdown, no code blocks):
 
 Complete these steps before scoring any dimension.
 
-**Step 0: Business model inference.** Before scoring anything, identify the business model from the page: high-volume transaction, consultative/relationship sale, subscription with retention requirements, local service, or other. Then ask whether the marketing infrastructure is built for that model.
+**Step 0: Business model context.** If a "Business Context (operator-supplied)" block is present at the top of the input, use it as ground truth for business type and conversion goal — skip inference for those dimensions. If not present, identify the business model from the page: high-volume transaction, consultative/relationship sale, subscription with retention requirements, local service, or other. Either way, ask whether the marketing infrastructure is built for that model.
 
 Examples of structural mismatches to name explicitly:
 - A consultative firm with no team visibility, no case studies, and no thought leadership — relationships require credibility infrastructure, none is being built
@@ -456,7 +472,14 @@ Name the mismatch when it's present. This is a strategic finding, not an executi
 
 **Step 1: Channel coherence check.** Evaluate acquisition channels not by count but by coherence. Do the channels in use reinforce each other — SEO building authority that makes paid more efficient, content driving organic that feeds email — or are they isolated bets with no compounding logic? When GA4 channel data is available, use actual session mix as evidence, not inference from the homepage alone.
 
-**Step 2: Retention signal read.** Assess whether the site acknowledges that customers have a life after first conversion. Look for: newsletter or content subscription, community signals, upgrade paths, help/onboarding content visible from the homepage. Retention infrastructure is almost always underdeveloped relative to acquisition on SMB and mid-market sites — note its absence when present.
+**Step 2: Retention mismatch diagnosis.** Derive what retention infrastructure the business model (from Step 0) structurally requires. Then check whether that infrastructure exists on the site. Name the mismatch explicitly when it's present — don't just note that retention signals are absent.
+
+Examples of how to state this:
+- A subscription business with no email capture and no content subscription path is investing in acquisition while the retention layer leaks. Name it that way.
+- A consultative firm with no newsletter, no case study library, and no community signal has no mechanism to stay top-of-mind between engagements. Name it that way.
+- A local service with no repeat-customer incentive and no onboarding content has no infrastructure for its second-most-valuable revenue source. Name it that way.
+
+The Retention & Expansion score should reflect whether the retention infrastructure matches what the business model requires — not just whether any retention signals exist.
 
 **Step 3: biggest_lever identification.** The biggest_lever field is the primary deliverable of this analysis. Identify the single strategic change — not a copy tweak or a missing page, but a structural shift in how this company's marketing is architected — that would change the trajectory. Write it as a specific, actionable recommendation, and state explicitly why this change outranks the other strategic gaps you identified.
 

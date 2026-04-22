@@ -10,6 +10,9 @@ export default function Home() {
   const [url, setUrl] = useState('')
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
+  const [businessType, setBusinessType] = useState('')
+  const [conversionGoal, setConversionGoal] = useState('')
+  const [targetCustomer, setTargetCustomer] = useState('')
   const [phase, setPhase] = useState<'idle' | 'running'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [agentsComplete, setAgentsComplete] = useState(0)
@@ -38,7 +41,7 @@ export default function Home() {
 
     try {
       const res = await fetch(
-        `/api/audit?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}&inviteCode=${encodeURIComponent(codeToUse)}`,
+        `/api/audit?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&company=${encodeURIComponent(company)}&inviteCode=${encodeURIComponent(codeToUse)}&businessType=${encodeURIComponent(businessType)}&conversionGoal=${encodeURIComponent(conversionGoal)}&targetCustomer=${encodeURIComponent(targetCustomer)}`,
         { signal: abortRef.current.signal }
       )
       if (res.status === 401) {
@@ -164,6 +167,35 @@ export default function Home() {
                   className="rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
                 />
               </div>
+              <select
+                value={businessType}
+                onChange={(e) => setBusinessType(e.target.value)}
+                className="w-full rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors appearance-none"
+                style={{ color: businessType ? '#1A1918' : '#C4BFB8' }}
+              >
+                <option value="" disabled>Business type</option>
+                <option value="Consultative / Professional Services">Consultative / Professional Services</option>
+                <option value="E-commerce / Retail">E-commerce / Retail</option>
+                <option value="SaaS / Subscription">SaaS / Subscription</option>
+                <option value="Local Service">Local Service</option>
+                <option value="Other">Other</option>
+              </select>
+              <input
+                type="text"
+                value={conversionGoal}
+                onChange={(e) => setConversionGoal(e.target.value)}
+                placeholder="Primary conversion goal — e.g. book a discovery call, start a free trial"
+                maxLength={80}
+                className="w-full rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
+              />
+              <input
+                type="text"
+                value={targetCustomer}
+                onChange={(e) => setTargetCustomer(e.target.value)}
+                placeholder="Target customer (optional) — e.g. marketing directors at mid-size B2B companies"
+                maxLength={120}
+                className="w-full rounded-lg bg-white border border-[#E8E4DC] text-[#1A1918] placeholder-[#C4BFB8] px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2D4A6E]/20 focus:border-[#2D4A6E] transition-colors"
+              />
               <div className="flex gap-3">
                 <input
                   type="text"
@@ -175,7 +207,7 @@ export default function Home() {
                 />
                 <button
                   onClick={startAudit}
-                  disabled={!url.trim() || !name.trim() || (!savedCode && !inviteCode.trim())}
+                  disabled={!url.trim() || !name.trim() || !businessType || !conversionGoal.trim() || (!savedCode && !inviteCode.trim())}
                   className="bg-[#2D4A6E] hover:bg-[#243D5C] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-lg transition-colors text-sm whitespace-nowrap"
                 >
                   Run Audit

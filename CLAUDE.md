@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting away Claude Code entirely for non-technical end users. Built as a pitch/demo tool for a boutique direct mail agency exploring digital service expansion. The "wizard of oz" framing is intentional — it should feel like a polished product, not a developer tool.
+A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting away Claude Code entirely for non-technical end users. Built as a pitch/demo tool for a boutique marketing agencies exploring digital service expansion or SMB's without resources to hire and retain digital marketing agencies. The "wizard of oz" framing is intentional — it should feel like a polished product, not a developer tool.
 
-**Strategic context:** The agency's target clients are traditional direct mail / catalog marketers. This tool demonstrates that digital marketing analysis (which previously required hiring a team) can now be delivered as a value-added service layer on top of existing engagement scopes.
+**Strategic context:** This tool demonstrates that digital marketing analysis (which previously required hiring a team) can be delivered as a value-added service layer on top of existing agency engagement scopes, or direct to SMB's
 
 ## Architecture
 
@@ -95,18 +95,18 @@ npx tsx scripts/setup-db.ts     # one-time: create Neon audits table
 npx tsx scripts/test-dataforseo.ts  # debug DataForSEO API calls
 ```
 
-## Data Sources & Tier Model
+## Data Sources
 
-The `DataSourcesPanel` component exists in `components/DataSourcesPanel.tsx` but is not currently rendered anywhere — the tier/upsell framing has been deprioritized. Data source provenance is surfaced lightly in the report via the "What We Analyzed" section instead.
+Data source provenance is surfaced lightly in the report via the "What We Analyzed" section.
 
 **Standard:** Page content (Firecrawl markdown when key present, raw HTML fallback) + PageSpeed Insights — always runs, no auth  
 **Connected (shipped):** GA4 + Search Console via service account — always-on, no session required. Data loads automatically when access has been granted.  
 **Professional (shipped — Labs only):** DataForSEO domain rank overview + competitors domain via `/api/competitive-data`. `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Backlinks API deprioritized (requires $100 minimum commitment). Graceful degradation if credentials missing.  
-**Agency (roadmap):** SEMrush/Ahrefs, Klaviyo, Meta Ads API  
+**Agency (roadmap):** SEMrush/Ahrefs, Klaviyo, Meta Ads API, if not available at dataforseo
 
 See `product-docs/ROADMAP.md` for full backlog.
 
-## Service Account / Connected Tier Architecture
+## Service Account
 
 - **Model:** A GCP service account (`digital-audit@marketing-audit-492917.iam.gserviceaccount.com`) authenticates to Google APIs. No OAuth flow, no session cookies, no user-facing connect step.
 - **Client setup:** Client adds the service account email as a Viewer on their GA4 property (Admin → Account Access Management) and as a Full User on their Search Console property (Settings → Users and Permissions). One-time, takes 2 minutes.

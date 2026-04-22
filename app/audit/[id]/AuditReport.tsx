@@ -944,7 +944,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
         {/* Page metadata collapsible */}
         {m && (
           <Collapsible
-            label="Page Metadata — Extracted before HTML strip"
+            label="Page Metadata"
             meta={
               <>
                 {m.title && <span>{m.title.slice(0, 40)}{m.title.length > 40 ? '…' : ''}</span>}
