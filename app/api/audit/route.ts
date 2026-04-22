@@ -582,6 +582,7 @@ async function writeAuditLog(origin: string, payload: {
   model: string
   gscContext: string | null
   ga4Context: string | null
+  pageMetadata: PageMetadata | null
   pagesAnalyzed: Array<{ url: string; status: string; chars: number; agents: AgentKey[] }>
   agents: Array<{
     key: string
@@ -948,6 +949,7 @@ export async function GET(request: Request) {
         model,
         gscContext,
         ga4Context,
+        pageMetadata,
         pagesAnalyzed,
         agents: results.map(({ key, result, userMessage, systemPrompt, usage }) => ({
           key,

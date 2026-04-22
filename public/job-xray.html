@@ -640,26 +640,29 @@ function slugFromUrl(url) {
 
 function generateReportJson(data) {
     return {
+        id: data.id,
         url: data.url,
         timestamp: data.timestamp,
         auditor: data.auditor,
+        model: data.model,
+        connected: data.connected,
         compositeScore: data.compositeScore,
-        pageMetadata: data.pageMetadata ? {
-            title: data.pageMetadata.title,
-            metaDescription: data.pageMetadata.metaDescription,
-            h1s: data.pageMetadata.h1s,
-            wordCount: data.pageMetadata.wordCount,
-            canonical: data.pageMetadata.canonical,
-            hasStructuredData: data.pageMetadata.hasStructuredData,
-            hasOgTags: data.pageMetadata.hasOgTags,
-            metaRobots: data.pageMetadata.metaRobots,
-        } : null,
-        pagesAnalyzed: (data.pagesAnalyzed || []).map(p => ({ url: p.url, status: p.status, chars: p.chars })),
+        pageMetadata: data.pageMetadata || null,
+        gscContext: data.gscContext || null,
+        ga4Context: data.ga4Context || null,
+        pagesAnalyzed: (data.pagesAnalyzed || []).map(p => ({
+            url: p.url,
+            status: p.status,
+            chars: p.chars,
+            agents: p.agents || [],
+        })),
         summary: data.summary,
         agents: (data.agents || []).map(ag => ({
             key: ag.key,
             label: AGENT_LABELS[ag.key] || ag.key,
             score: ag.score,
+            systemPrompt: ag.systemPrompt || null,
+            userMessage: ag.userMessage || null,
             result: ag.result,
         })),
     };
@@ -686,6 +689,24 @@ function generateMarkdown(data) {
         if (m.h1s && m.h1s.length) push(`**H1s:** ${m.h1s.join(' / ')}`);
         if (m.wordCount)       push(`**Word Count:** ~${m.wordCount.toLocaleString()}`);
         if (m.canonical)       push(`**Canonical:** ${m.canonical}`);
+        if (m.metaRobots)      push(`**Robots:** ${m.metaRobots}`);
+        if (m.generator)       push(`**Generator:** ${m.generator}`);
+        const flags = [];
+        if (m.hasStructuredData) flags.push('Structured Data');
+        if (m.hasOgTags)         flags.push('OG Tags');
+        if (flags.length) push(`**Signals:** ${flags.join(', ')}`);
+        push('');
+    }
+
+    if (data.gscContext) {
+        push('## Search Console Data');
+        push(data.gscContext);
+        push('');
+    }
+
+    if (data.ga4Context) {
+        push('## Google Analytics 4 Data');
+        push(data.ga4Context);
         push('');
     }
 
