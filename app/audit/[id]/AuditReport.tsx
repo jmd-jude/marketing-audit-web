@@ -519,7 +519,7 @@ function FormattedReport({ agent }: { agent: D }) {
 
 function AgentCard({ agent }: { agent: D }) {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'brief' | 'output'>('output')
+  const [tab, setTab] = useState<'brief' | 'output'>('brief')
   const label = AGENT_LABELS[agent.key] ?? agent.key
   const sig = detectSignals(agent.userMessage ?? '')
 
@@ -581,7 +581,7 @@ function AgentCard({ agent }: { agent: D }) {
           )}
 
           {tab === 'brief' && (
-            <div className="px-[1.1rem] py-4">
+            <div className="px-[1.1rem] py-4 max-h-[500px] overflow-y-auto">
               <div className="flex gap-4 flex-wrap mb-3 text-[11px]">
                 <span className="text-[#606770]">
                   Characters: <span className="font-bold text-[#1C1E21]">{(agent.userMessage ?? '').length.toLocaleString()}</span>
@@ -602,10 +602,8 @@ function AgentCard({ agent }: { agent: D }) {
                   </span>
                 ))}
               </div>
-              <div className="max-h-[280px] overflow-y-auto bg-[#F8F9FA] border border-[#CDD1D8] rounded-lg p-3">
-                <div className="prose-brief">
-                  <MdContent>{agent.userMessage ?? ''}</MdContent>
-                </div>
+              <div className="bg-[#F8F9FA] border border-[#CDD1D8] rounded-lg p-3">
+                <MdContent>{agent.userMessage ?? ''}</MdContent>
               </div>
             </div>
           )}
