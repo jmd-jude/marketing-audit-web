@@ -6,7 +6,7 @@ export function SiteHeader() {
       <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex flex-col gap-0.5">
           <span className="font-display text-[#1A1918] text-[15px] tracking-tight leading-none">
-            SEO Speedwagon
+            Lanterne SEO
           </span>
           <span className="text-[#9C9690] text-[10px] tracking-wide leading-none">
             Digital Audits at Digital Speeds

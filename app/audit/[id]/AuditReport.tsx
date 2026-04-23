@@ -17,6 +17,235 @@ const AGENT_LABELS: Record<string, string> = {
 
 const AGENT_ORDER = ['content', 'conversion', 'technical', 'strategy', 'competitive']
 
+// ── Download helpers ──────────────────────────────────────────────────────────
+
+function slugFromUrl(url: string) {
+  return (url || 'audit').replace(/https?:\/\//, '').replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+}
+
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function generateMarkdown(data: D): string {
+  const date = new Date(data.timestamp).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  })
+  const L: string[] = []
+  const push = (s?: string) => L.push(s ?? '')
+
+  push(`# Site Audit: ${data.url}`)
+  push(`**Date:** ${date}`)
+  if (data.auditor) push(`**Auditor:** ${data.auditor}`)
+  push(`**Composite Score:** ${data.compositeScore}/100`)
+  push('')
+
+  const m = data.pageMetadata
+  if (m) {
+    push('## Page Metadata')
+    if (m.title)           push(`**Title:** ${m.title}`)
+    if (m.metaDescription) push(`**Meta Description:** ${m.metaDescription}`)
+    if (m.h1s?.length)     push(`**H1s:** ${m.h1s.join(' / ')}`)
+    if (m.wordCount)       push(`**Word Count:** ~${m.wordCount.toLocaleString()}`)
+    if (m.canonical)       push(`**Canonical:** ${m.canonical}`)
+    if (m.metaRobots)      push(`**Robots:** ${m.metaRobots}`)
+    if (m.generator)       push(`**Generator:** ${m.generator}`)
+    const flags: string[] = []
+    if (m.hasStructuredData) flags.push('Structured Data')
+    if (m.hasOgTags)         flags.push('OG Tags')
+    if (flags.length)        push(`**Signals:** ${flags.join(', ')}`)
+    push('')
+  }
+
+  if (Array.isArray(data.pagesAnalyzed) && data.pagesAnalyzed.length) {
+    push('## Interior Pages Analyzed')
+    data.pagesAnalyzed.forEach((p: D) => {
+      push(`- **${p.url}** — ${p.status}${p.chars ? ` (${(p.chars / 1000).toFixed(1)}k chars)` : ''}`)
+    })
+    push('')
+  }
+
+  if (data.gscContext) {
+    push('## Search Console Data')
+    push(data.gscContext)
+    push('')
+  }
+
+  if (data.ga4Context) {
+    push('## Google Analytics 4 Data')
+    push(data.ga4Context)
+    push('')
+  }
+
+  const s = data.summary ?? {}
+  if (s.overall_verdict || s.top_priorities?.length || s.quick_wins?.length) {
+    push('## Summary')
+    if (s.overall_verdict) {
+      push('### Overall Verdict')
+      push(s.overall_verdict)
+      push('')
+    }
+    if (s.top_priorities?.length) {
+      push('### Top Priorities')
+      s.top_priorities.forEach((p: D) => {
+        push(`**${p.rank}. ${p.area}**`)
+        push(p.finding)
+        if (p.action) push(`→ ${p.action}`)
+        push('')
+      })
+    }
+    if (s.quick_wins?.length) {
+      push('### Quick Wins')
+      s.quick_wins.forEach((w: string) => push(`- ${w}`))
+      push('')
+    }
+  }
+
+  ;(data.agents ?? []).forEach((ag: D) => {
+    const label = AGENT_LABELS[ag.key] ?? ag.key
+    const r: D = ag.result ?? {}
+    push(`## ${label}`)
+    if (ag.score != null) push(`**Score:** ${ag.score}/100`)
+    push('')
+
+    if (r.dimensions?.length) {
+      push('### Dimensions')
+      r.dimensions.forEach((d: D) => push(`**${d.name}:** ${d.score}/10${d.finding ? ` — ${d.finding}` : ''}`))
+      push('')
+    }
+    if (r.wins?.length) {
+      push('### Strengths')
+      r.wins.forEach((w: string) => push(`- ${w}`))
+      push('')
+    }
+    if (r.critical_fixes?.length) {
+      push('### Critical Fixes')
+      r.critical_fixes.forEach((f: string) => push(`- ${f}`))
+      push('')
+    }
+    if (r.before_after?.length) {
+      push('### Copy Rewrites')
+      r.before_after.forEach((ba: D) => {
+        push(`**${ba.element}**`)
+        push('| | |')
+        push('|---|---|')
+        push(`| Before | ${ba.before} |`)
+        push(`| After | ${ba.after} |`)
+        if (ba.why) push(`*${ba.why}*`)
+        push('')
+      })
+    }
+    if (r.quick_wins?.length) {
+      push('### Quick Wins')
+      r.quick_wins.forEach((w: string) => push(`- ${w}`))
+      push('')
+    }
+    if (r.funnel_leaks?.length) {
+      push('### Funnel Leaks')
+      r.funnel_leaks.forEach((l: D) => {
+        push(`**[${l.severity}] ${l.stage}:** ${l.issue}`)
+        if (l.fix) push(`→ ${l.fix}`)
+        push('')
+      })
+    }
+    if (r.ab_tests?.length) {
+      push('### A/B Test Ideas')
+      r.ab_tests.forEach((t: D) => {
+        push(`- *${t.hypothesis}*`)
+        push(`  Metric: ${t.metric}${t.impact ? ` · Impact: ${t.impact}` : ''}`)
+      })
+      push('')
+    }
+    if (r.pagespeed) {
+      const ps: D = r.pagespeed
+      push('### PageSpeed')
+      push('| Performance | Accessibility | SEO | Best Practices |')
+      push('|---|---|---|---|')
+      push(`| ${ps.performance ?? '—'} | ${ps.accessibility ?? '—'} | ${ps.seo ?? '—'} | ${ps.best_practices ?? '—'} |`)
+      const cwv = [['LCP', ps.lcp], ['CLS', ps.cls], ['TBT', ps.tbt], ['FCP', ps.fcp]].filter(([, v]) => v)
+      if (cwv.length) push(cwv.map(([k, v]) => `**${k}:** ${v}`).join(' · '))
+      push('')
+    }
+    if (r.seo_quick_wins?.length) {
+      push('### SEO Quick Wins')
+      r.seo_quick_wins.forEach((w: string) => push(`- ${w}`))
+      push('')
+    }
+    if (r.technical_issues?.length) {
+      push('### Technical Issues')
+      r.technical_issues.forEach((i: D) => {
+        push(`**[${i.severity}] ${i.issue}**`)
+        if (i.impact) push(i.impact)
+        if (i.fix) push(`→ ${i.fix}`)
+        push('')
+      })
+    }
+    if (r.tracking_status?.length) {
+      push('### Tracking Status')
+      r.tracking_status.forEach((t: D) => push(`- **${t.tool}:** ${t.present ? 'Present' : 'Missing'}${t.notes ? ` — ${t.notes}` : ''}`))
+      push('')
+    }
+    if (r.likely_competitors?.length) {
+      push('### Competitors')
+      r.likely_competitors.forEach((c: D) => {
+        push(`**${c.name}**`)
+        push(`Strength: ${c.strength}`)
+        push(`Weakness: ${c.weakness}`)
+        push('')
+      })
+    }
+    if (r.opportunities?.length) {
+      push('### Opportunities')
+      r.opportunities.forEach((o: D) => {
+        push(`**${o.title}**`)
+        push(o.description)
+        push('')
+      })
+    }
+    if (r.recommended_actions?.length) {
+      push('### Recommended Actions')
+      r.recommended_actions.forEach((a: string) => push(`- ${a}`))
+      push('')
+    }
+    if (r.biggest_lever) {
+      const lever = r.biggest_lever
+      const rec = typeof lever === 'object' && lever !== null ? lever.recommendation : lever
+      const why = typeof lever === 'object' && lever !== null ? lever.why : null
+      push('### Biggest Lever')
+      push(rec)
+      if (why) push(`*${why}*`)
+      push('')
+    }
+    if (r.revenue_opportunities) {
+      const rev: D = r.revenue_opportunities
+      push('### Revenue Opportunities')
+      const revTier = (items: D[], tierLabel: string) => {
+        if (!items?.length) return
+        push(`**${tierLabel}**`)
+        items.forEach((i: D) => push(`- [${i.effort}] ${i.opportunity}${i.impact ? ` — ${i.impact}` : ''}`))
+      }
+      revTier(rev.quick_wins, 'Quick Wins')
+      revTier(rev.medium_term, 'Medium Term')
+      revTier(rev.strategic, 'Strategic')
+      push('')
+    }
+    if (r.brand_score != null || r.growth_score != null) {
+      push('### Brand & Growth Scores')
+      if (r.brand_score != null) push(`**Brand Score:** ${r.brand_score}`)
+      if (r.growth_score != null) push(`**Growth Score:** ${r.growth_score}`)
+      push('')
+    }
+  })
+
+  return L.join('\n')
+}
+
 // ── Score helpers ─────────────────────────────────────────────────────────────
 
 function scoreColor(s: number) {
@@ -758,6 +987,15 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
               {compositeScore}
             </div>
             <div className="text-[9px] uppercase tracking-widest text-[#606770] mt-0.5">Composite Score</div>
+            {unlocked && (
+              <button
+                onClick={() => downloadFile(generateMarkdown(data), `audit-${slugFromUrl(data.url)}.md`, 'text/markdown')}
+                className="mt-2 text-[10px] font-semibold text-[#606770] border border-[#CDD1D8] rounded px-2 py-1 hover:bg-[#F0F2F5] transition-colors"
+                title="Download report as Markdown"
+              >
+                ↓ Download .md
+              </button>
+            )}
           </div>
         </div>
 
@@ -906,7 +1144,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
         )}
 
         {/* GA4 & GSC collapsible */}
-        {(gscPresent || ga4Present) && (
+        {unlocked && (gscPresent || ga4Present) && (
           <Collapsible
             label="Google: GA4 & Search Console"
             meta={
@@ -942,7 +1180,7 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
         )}
 
         {/* Page metadata collapsible */}
-        {m && (
+        {unlocked && m && (
           <Collapsible
             label="Page Metadata"
             meta={

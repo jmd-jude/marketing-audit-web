@@ -90,7 +90,7 @@ const PAGE_CONFIG: Array<{
   {
     patterns: ['/pricing', '/plans', '/packages', '/rates', '/investment'],
     score: 10,
-    agents: ['conversion', 'competitive'],
+    agents: ['conversion', 'competitive', 'content'],
   },
   {
     patterns: ['/about', '/about-us', '/our-story', '/team', '/who-we-are'],
@@ -862,9 +862,9 @@ export async function GET(request: Request) {
 
       // Per PRD: which agents get which data sources
       const GSC_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content'])
-      const GA4_AGENTS = new Set(['technical', 'strategy', 'competitive', 'content', 'conversion'])
-      const RANK_AGENTS = new Set(['technical', 'strategy'])
-      const COMPETITORS_AGENTS = new Set(['competitive', 'strategy'])
+      const GA4_AGENTS = new Set(['technical', 'strategy', 'content', 'conversion'])
+      const RANK_AGENTS = new Set(['technical', 'strategy', 'competitive'])
+      const COMPETITORS_AGENTS = new Set(['competitive', 'strategy', 'content'])
 
       const promises = agentKeys.map(async (key) => {
         const parts: (string | null)[] = [businessContextParts]

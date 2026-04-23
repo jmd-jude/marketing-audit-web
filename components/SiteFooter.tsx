@@ -7,7 +7,7 @@ export function SiteFooter() {
         </span>
         <div className="flex items-center gap-6 text-xs text-[#9C9690]">
           
-          <span>© {new Date().getFullYear()} Speedwagon Marketing</span>
+          <span>© {new Date().getFullYear()} lanternerouge.io</span>
         </div>
       </div>
     </footer>

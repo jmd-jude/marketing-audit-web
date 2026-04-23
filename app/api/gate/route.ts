@@ -1,3 +1,5 @@
+import { neon } from '@neondatabase/serverless'
+
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
@@ -6,6 +8,15 @@ export async function POST(request: Request) {
     auditId: string
     url: string
     auditor?: string
+  }
+
+  if (email && auditId && process.env.DATABASE_URL) {
+    try {
+      const sql = neon(process.env.DATABASE_URL)
+      await sql`UPDATE audits SET email = ${email} WHERE id = ${auditId}`
+    } catch (err) {
+      console.error('[gate] email persist failed:', err)
+    }
   }
 
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL

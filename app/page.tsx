@@ -177,7 +177,8 @@ export default function Home() {
                 <option value="Consultative / Professional Services">Consultative / Professional Services</option>
                 <option value="E-commerce / Retail">E-commerce / Retail</option>
                 <option value="SaaS / Subscription">SaaS / Subscription</option>
-                <option value="Local Service">Local Service</option>
+                <option value="Local Services">Local Services</option>
+                <option value="Informational / Blog">Informational / Blog</option>
                 <option value="Other">Other</option>
               </select>
               <input

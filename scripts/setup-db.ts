@@ -27,9 +27,11 @@ async function setup() {
       connected   BOOLEAN DEFAULT FALSE,
       model       TEXT,
       duration_ms INTEGER,
+      email       TEXT,
       payload     JSONB NOT NULL
     )
   `
+  await sql`ALTER TABLE audits ADD COLUMN IF NOT EXISTS email TEXT`
   console.log('audits table ready')
 }
 
