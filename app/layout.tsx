@@ -1,28 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
 import { SiteHeader } from "@/components/SiteHeader"
 import { SiteFooter } from "@/components/SiteFooter"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const dmSerifDisplay = DM_Serif_Display({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: "400",
-});
-
 export const metadata: Metadata = {
-  title: "Marketing Intelligence",
+  title: "lanterne rouge",
   description: "Five-dimension website analysis. Content, conversion, SEO, competitive positioning, and brand strategy — delivered simultaneously.",
 };
 
@@ -32,11 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${dmSerifDisplay.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
+    <html lang="en" className="h-full">
+      <body className="min-h-full flex flex-col antialiased">
         <SiteHeader />
         <main className="flex-1">
           {children}

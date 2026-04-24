@@ -83,39 +83,39 @@ export function DataSourcesPanel({
   const activeSources = sources.filter((s) => s.status === 'active')
 
   return (
-    <div className="bg-white rounded-lg border border-[#E8E4DC] overflow-hidden">
+    <div className="bg-white rounded-lg overflow-hidden" style={{ border: '0.5px solid var(--lr-border-med)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-[#F8F6F2] transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-lr-parchment transition-colors"
       >
         <div className="flex items-center gap-2 flex-1">
-          <span className="text-xs font-semibold text-[#6B6560]">Data Sources</span>
-          <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-medium">
+          <span className="text-xs font-semibold text-lr-stone">Data Sources</span>
+          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(74,122,90,0.10)', color: 'var(--lr-green)', border: '0.5px solid rgba(74,122,90,0.25)' }}>
             {activeSources.length} active
           </span>
         </div>
         <div className="hidden sm:flex items-center gap-4">
           {activeSources.map((s) => (
-            <span key={s.id} className="text-xs text-[#9C9690] flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block flex-shrink-0" />
+            <span key={s.id} className="text-xs text-lr-stone flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-lr-green inline-block flex-shrink-0" />
               {s.name}
             </span>
           ))}
         </div>
-        <span className="text-[#C4BFB8] text-xs">{expanded ? '▲' : '▼'}</span>
+        <span className="text-lr-stone/40 text-xs">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && (
-        <div className="border-t border-[#F0EDE8] px-5 py-4 space-y-5">
+        <div className="px-5 py-4 space-y-5" style={{ borderTop: '0.5px solid var(--lr-border)' }}>
           <div>
-            <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2.5">Active — used in this audit</div>
+            <div className="text-xs font-semibold text-lr-stone/60 uppercase tracking-widest mb-2.5">Active — used in this audit</div>
             <div className="space-y-2">
               {activeSources.map((s) => (
                 <div key={s.id} className="flex items-start gap-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-lr-green flex-shrink-0 mt-1.5" />
                   <div>
-                    <span className="text-sm text-[#1A1918] font-medium">{s.name}</span>
-                    <span className="text-xs text-[#9C9690] ml-2">{s.description}</span>
+                    <span className="text-sm text-lr-ink font-medium">{s.name}</span>
+                    <span className="text-xs text-lr-stone ml-2">{s.description}</span>
                   </div>
                 </div>
               ))}
@@ -123,14 +123,14 @@ export function DataSourcesPanel({
           </div>
 
           <div>
-            <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-2.5">Roadmap</div>
+            <div className="text-xs font-semibold text-lr-stone/60 uppercase tracking-widest mb-2.5">Roadmap</div>
             <div className="space-y-2">
               {sources.filter((s) => s.status === 'coming_soon').map((s) => (
                 <div key={s.id} className="flex items-start gap-3 opacity-50">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#C4BFB8] flex-shrink-0 mt-1.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-lr-stone/40 flex-shrink-0 mt-1.5" />
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm text-[#6B6560] font-medium">{s.name}</span>
-                    <span className="text-xs text-[#9C9690] ml-2">{s.description}</span>
+                    <span className="text-sm text-lr-stone font-medium">{s.name}</span>
+                    <span className="text-xs text-lr-stone/60 ml-2">{s.description}</span>
                   </div>
                 </div>
               ))}
@@ -138,15 +138,15 @@ export function DataSourcesPanel({
           </div>
 
           {pagesAnalyzed.length > 0 && (
-            <div className="pt-1 border-t border-[#F0EDE8]">
-              <div className="text-xs font-semibold text-[#9C9690] uppercase tracking-widest mb-1.5">Pages analyzed</div>
-              <div className="text-xs text-[#6B6560]">
+            <div className="pt-1" style={{ borderTop: '0.5px solid var(--lr-border)' }}>
+              <div className="text-xs font-semibold text-lr-stone/60 uppercase tracking-widest mb-1.5">Pages analyzed</div>
+              <div className="text-xs text-lr-stone">
                 homepage{pagesAnalyzed.filter((p) => p.status === 'fetched').map((p) => `, ${p.url}`).join('')}
               </div>
             </div>
           )}
 
-          <div className="pt-1 border-t border-[#F0EDE8] text-xs text-[#C4BFB8]">
+          <div className="pt-1 text-xs text-lr-stone/40" style={{ borderTop: '0.5px solid var(--lr-border)' }}>
             GA4 and Search Console data loads automatically when our google service account access has been granted.
           </div>
         </div>
