@@ -939,17 +939,15 @@ function AgentSection({ agent }: { agent: D }) {
 
   return (
     <div>
-      <h1 className="text-[22px] font-medium text-lr-ink mb-5">{AGENT_LABELS[agent.key] ?? agent.key}</h1>
-
-      <div className="flex gap-5 items-start mb-6 flex-wrap">
-        <div className="flex flex-col items-center gap-1 flex-shrink-0">
-          <ScoreRing score={agent.score ?? 0} size={80} />
-          <div className="text-[10px] uppercase tracking-wider text-lr-stone">Score</div>
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <Dimensions dims={agent.result?.dimensions} />
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-[22px] font-medium text-lr-ink">{AGENT_LABELS[agent.key] ?? agent.key}</h1>
+        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+          <ScoreRing score={agent.score ?? 0} size={44} />
+          <div className="text-[8px] uppercase tracking-wider text-lr-stone">Score</div>
         </div>
       </div>
+
+      <Dimensions dims={agent.result?.dimensions} />
 
       <FormattedReport agent={agent} skipDimensions />
 
@@ -1161,14 +1159,14 @@ export default function AuditReport({ data, autoUnlock }: { data: D; autoUnlock?
             {/* Score rings row */}
             <div className="flex items-center gap-5 flex-wrap mb-6">
               <div className="flex flex-col items-center gap-1">
-                <ScoreRing score={compositeScore} size={96} />
+                <ScoreRing score={compositeScore} size={116} />
                 <div className="text-[9px] uppercase tracking-widest text-lr-stone">Composite</div>
               </div>
-              <div className="flex gap-4 flex-wrap">
+              <div className="flex gap-5 flex-wrap">
                 {orderedAgents.map((a) => (
                   <button key={a.key} onClick={() => setActiveSection(a.key)} className="flex flex-col items-center gap-1 hover:opacity-70 transition-opacity">
-                    <ScoreRing score={a.score ?? 0} size={64} />
-                    <div className="text-[9px] text-lr-stone text-center" style={{ maxWidth: 80 }}>{AGENT_LABELS[a.key]}</div>
+                    <ScoreRing score={a.score ?? 0} size={80} />
+                    <div className="text-[9px] text-lr-stone text-center" style={{ maxWidth: 90 }}>{AGENT_LABELS[a.key]}</div>
                   </button>
                 ))}
               </div>

@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lanterne rouge — Site Audit</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:       #1a1a1a;
+    --red:       #C8313A;
+    --parchment: #f5f1ec;
+    --stone:     #8a7d6e;
+    --asphalt:   #2d2d2d;
+    --border:    rgba(26,26,26,0.1);
+    --border-med:rgba(26,26,26,0.18);
+    --amber:     #B87333;
+    --green:     #4A7A5A;
+    --sidebar-w: 220px;
+    --header-h:  64px;
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--parchment); color: var(--ink); font-size: 14px; line-height: 1.5; }
+
+  /* ── Upload screen ── */
+  #upload-screen {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; padding: 2rem;
+  }
+  .upload-logo { display: flex; align-items: center; gap: 12px; }
+  .upload-logo-text .wordmark { font-family: Georgia, serif; font-size: 22px; color: var(--ink); letter-spacing: -0.3px; }
+  .upload-logo-text .sub { font-family: Georgia, serif; font-size: 11px; letter-spacing: 4px; color: var(--stone); text-transform: uppercase; }
+  .upload-card {
+    background: white; border: 0.5px solid var(--border-med); border-radius: 12px; padding: 40px 48px; text-align: center;
+    max-width: 420px; width: 100%;
+  }
+  .upload-card h2 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+  .upload-card p { font-size: 13px; color: var(--stone); margin-bottom: 28px; line-height: 1.6; }
+  .upload-btn {
+    display: inline-block; background: var(--ink); color: var(--parchment); font-size: 13px; font-weight: 500;
+    padding: 10px 24px; border-radius: 6px; cursor: pointer; border: none; letter-spacing: 0.02em; transition: opacity .15s;
+  }
+  .upload-btn:hover { opacity: .8; }
+  #file-input { display: none; }
+  .upload-note { font-size: 11px; color: var(--stone); margin-top: 12px; }
+
+  /* ── Layout ── */
+  #dashboard { display: none; }
+  .dash-header {
+    position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 100;
+    background: var(--asphalt); display: flex; align-items: center; padding: 0 24px;
+    gap: 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .dash-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .dash-logo-text .wm { font-family: Georgia, serif; font-size: 16px; color: var(--parchment); letter-spacing: -0.2px; }
+  .dash-logo-text .sub { font-family: Georgia, serif; font-size: 8px; letter-spacing: 3.5px; color: var(--stone); text-transform: uppercase; }
+  .dash-site-url { font-size: 13px; color: rgba(245,241,236,0.6); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dash-site-url a { color: rgba(245,241,236,0.75); text-decoration: none; }
+  .dash-site-url a:hover { color: var(--parchment); }
+  .dash-meta { font-size: 11px; color: var(--stone); flex-shrink: 0; text-align: right; line-height: 1.6; }
+
+  .dash-body { display: flex; padding-top: var(--header-h); min-height: 100vh; }
+
+  .sidebar {
+    width: var(--sidebar-w); flex-shrink: 0; position: fixed; top: var(--header-h); bottom: 0;
+    overflow-y: auto; background: white; border-right: 0.5px solid var(--border);
+    padding: 20px 0;
+  }
+  .sidebar-section { margin-bottom: 4px; }
+  .sidebar-label { font-size: 10px; font-weight: 600; color: var(--stone); text-transform: uppercase; letter-spacing: .07em; padding: 8px 20px 4px; }
+  .sidebar-link {
+    display: flex; align-items: center; gap: 10px; padding: 7px 20px; font-size: 13px; color: var(--ink);
+    text-decoration: none; cursor: pointer; transition: background .1s; border: none; background: none; width: 100%; text-align: left;
+  }
+  .sidebar-link:hover { background: var(--parchment); }
+  .sidebar-link.active { background: var(--parchment); color: var(--red); font-weight: 500; }
+  .sidebar-link .score-pill {
+    margin-left: auto; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 20px;
+    background: var(--parchment);
+  }
+  .score-pill.poor  { background: rgba(200,49,58,0.12); color: var(--red); }
+  .score-pill.mid   { background: rgba(184,115,51,0.12); color: var(--amber); }
+  .score-pill.good  { background: rgba(74,122,90,0.12);  color: var(--green); }
+
+  .main-content { margin-left: var(--sidebar-w); flex: 1; padding: 32px 40px; max-width: 1000px; }
+
+  /* ── Section ── */
+  .section { display: none; }
+  .section.active { display: block; }
+  .section-header { margin-bottom: 28px; }
+  .section-header h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  .section-header .section-score-row { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+
+  /* ── Score ring ── */
+  .score-ring-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .score-ring-label { font-size: 10px; color: var(--stone); text-transform: uppercase; letter-spacing: .06em; }
+  .score-ring svg text { font-family: Georgia, serif; }
+
+  /* ── Cards ── */
+  .card {
+    background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 16px;
+  }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 12px; }
+  .card h3 { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+
+  /* ── Dimensions bar ── */
+  .dimensions-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .dim-row { display: flex; align-items: center; gap: 12px; }
+  .dim-name { font-size: 13px; color: var(--ink); min-width: 170px; flex-shrink: 0; }
+  .dim-bar-wrap { flex: 1; background: var(--parchment); border-radius: 4px; height: 6px; overflow: hidden; }
+  .dim-bar { height: 100%; border-radius: 4px; transition: width .4s ease; }
+  .dim-score { font-size: 12px; font-weight: 600; min-width: 28px; text-align: right; }
+  .dim-finding { font-size: 12px; color: var(--stone); margin-top: 3px; padding-left: 182px; line-height: 1.5; }
+
+  /* ── Verdict / big text ── */
+  .verdict-text { font-size: 14px; line-height: 1.7; color: var(--ink); }
+  .biggest-lever-box {
+    border-left: 3px solid var(--red); padding: 14px 18px; background: rgba(200,49,58,0.04);
+    border-radius: 0 8px 8px 0; margin-top: 8px;
+  }
+  .biggest-lever-box .lever-rec { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .biggest-lever-box .lever-why { font-size: 13px; color: var(--stone); line-height: 1.6; }
+
+  /* ── Priority cards ── */
+  .priority-card {
+    background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 18px 20px 18px 20px;
+    margin-bottom: 12px; display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start;
+  }
+  .priority-num { font-family: Georgia, serif; font-size: 20px; color: var(--red); line-height: 1; margin-top: 2px; }
+  .priority-area { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 4px; }
+  .priority-finding { font-size: 13px; color: var(--ink); line-height: 1.6; margin-bottom: 8px; }
+  .priority-action { font-size: 13px; color: var(--asphalt); line-height: 1.6; padding: 10px 14px; background: var(--parchment); border-radius: 6px; }
+  .priority-action::before { content: "→ "; font-weight: 600; color: var(--red); }
+
+  /* ── Quick wins ── */
+  .wins-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .wins-list li {
+    font-size: 13px; line-height: 1.6; padding: 10px 14px 10px 38px; background: white;
+    border: 0.5px solid var(--border); border-radius: 8px; position: relative;
+  }
+  .wins-list li::before { content: "✓"; position: absolute; left: 14px; color: var(--green); font-weight: 700; }
+
+  /* ── Fixes list ── */
+  .fixes-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .fixes-list li { font-size: 13px; line-height: 1.6; padding: 10px 14px; background: rgba(200,49,58,0.04); border: 0.5px solid rgba(200,49,58,0.15); border-radius: 8px; }
+
+  /* ── Before/after ── */
+  .ba-card { background: white; border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .ba-header { padding: 10px 16px; background: var(--parchment); border-bottom: 0.5px solid var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); }
+  .ba-body { display: grid; grid-template-columns: 1fr 1fr; }
+  .ba-col { padding: 14px 16px; }
+  .ba-col:first-child { border-right: 0.5px solid var(--border); }
+  .ba-col-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 6px; font-weight: 600; }
+  .ba-col-text { font-size: 13px; line-height: 1.6; font-style: italic; color: var(--stone); }
+  .ba-col-text.after { color: var(--ink); font-style: normal; }
+  .ba-why { padding: 12px 16px; border-top: 0.5px solid var(--border); font-size: 12px; color: var(--stone); line-height: 1.6; background: rgba(245,241,236,0.5); }
+  .ba-why::before { content: "Why: "; font-weight: 600; color: var(--ink); }
+
+  /* ── Funnel leaks ── */
+  .leak-card {
+    background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 16px 20px;
+    margin-bottom: 10px; display: grid; grid-template-columns: 80px 1fr; gap: 14px;
+  }
+  .severity-badge {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    padding: 3px 8px; border-radius: 4px; display: inline-block; align-self: start; margin-top: 2px;
+  }
+  .sev-critical { background: rgba(200,49,58,0.12); color: var(--red); }
+  .sev-high     { background: rgba(184,115,51,0.15); color: var(--amber); }
+  .sev-medium   { background: rgba(138,125,110,0.15); color: var(--stone); }
+  .sev-low      { background: rgba(26,26,26,0.06); color: var(--stone); }
+  .leak-stage { font-size: 11px; font-weight: 600; color: var(--stone); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .leak-issue { font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+  .leak-fix { font-size: 13px; color: var(--asphalt); padding: 8px 12px; background: var(--parchment); border-radius: 6px; line-height: 1.6; }
+  .leak-fix::before { content: "→ "; color: var(--red); font-weight: 600; }
+
+  /* ── AB Tests ── */
+  .ab-card { background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; }
+  .ab-hyp { font-size: 13px; line-height: 1.6; font-style: italic; margin-bottom: 10px; }
+  .ab-meta { display: flex; gap: 20px; flex-wrap: wrap; }
+  .ab-meta-item { font-size: 11px; }
+  .ab-meta-item span { font-weight: 600; color: var(--stone); text-transform: uppercase; letter-spacing: .05em; display: block; }
+
+  /* ── PageSpeed ── */
+  .pagespeed-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .ps-card { background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .ps-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 8px; font-weight: 600; }
+  .ps-score { font-family: Georgia, serif; font-size: 28px; font-weight: 400; line-height: 1; }
+  .cwv-row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .cwv-item { text-align: center; }
+  .cwv-val { font-size: 15px; font-weight: 600; font-family: Georgia, serif; }
+  .cwv-key { font-size: 10px; color: var(--stone); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
+
+  /* ── Tracking status ── */
+  .tracking-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tracking-row { background: white; border: 0.5px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .tracking-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--stone); margin-bottom: 4px; }
+  .tracking-status { font-size: 13px; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .tracking-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tdot-present { background: var(--green); }
+  .tdot-missing  { background: var(--red); }
+  .tdot-partial  { background: var(--amber); }
+  .tracking-note { font-size: 12px; color: var(--stone); line-height: 1.5; }
+
+  /* ── Competitors ── */
+  .competitor-card { background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; }
+  .comp-name { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .comp-sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .comp-sw { padding: 10px 14px; border-radius: 8px; }
+  .comp-str { background: rgba(74,122,90,0.06); border: 0.5px solid rgba(74,122,90,0.2); }
+  .comp-wk  { background: rgba(200,49,58,0.04); border: 0.5px solid rgba(200,49,58,0.15); }
+  .comp-sw-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .comp-str .comp-sw-label { color: var(--green); }
+  .comp-wk  .comp-sw-label { color: var(--red); }
+  .comp-sw-text { font-size: 12px; line-height: 1.5; color: var(--ink); }
+
+  /* ── Metadata ── */
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .meta-item { background: white; border: 0.5px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .meta-key { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 4px; }
+  .meta-val { font-size: 13px; line-height: 1.5; word-break: break-word; }
+  .meta-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 12px; background: var(--parchment); border: 0.5px solid var(--border); margin: 2px 2px 2px 0; }
+
+  /* ── Pages analyzed ── */
+  .pages-table { width: 100%; border-collapse: collapse; }
+  .pages-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); text-align: left; padding: 6px 12px; border-bottom: 0.5px solid var(--border); }
+  .pages-table td { font-size: 13px; padding: 8px 12px; border-bottom: 0.5px solid rgba(26,26,26,0.05); }
+  .pages-table tr:last-child td { border-bottom: none; }
+  .agent-tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; background: var(--parchment); border: 0.5px solid var(--border); margin-right: 3px; color: var(--stone); }
+
+  /* ── Revenue opportunities ── */
+  .rev-section { margin-bottom: 20px; }
+  .rev-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
+  .rev-item { background: white; border: 0.5px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+  .rev-item-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .rev-impact { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 12px; }
+  .rev-low      { background: rgba(138,125,110,0.12); color: var(--stone); }
+  .rev-medium   { background: rgba(184,115,51,0.15);  color: var(--amber); }
+  .rev-high     { background: rgba(74,122,90,0.12);   color: var(--green); }
+  .rev-item-text { font-size: 13px; line-height: 1.6; }
+  .rev-item-why { font-size: 12px; color: var(--stone); margin-top: 4px; padding-top: 6px; border-top: 0.5px solid rgba(26,26,26,0.06); }
+
+  /* ── GA4 / GSC data ── */
+  .data-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .data-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--stone); text-align: left; padding: 6px 12px; border-bottom: 0.5px solid var(--border); }
+  .data-table td { font-size: 12px; padding: 7px 12px; border-bottom: 0.5px solid rgba(26,26,26,0.05); font-variant-numeric: tabular-nums; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-item { background: white; border: 0.5px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .stat-val { font-family: Georgia, serif; font-size: 22px; font-weight: 400; margin-bottom: 2px; }
+  .stat-label { font-size: 11px; color: var(--stone); }
+
+  /* ── Section divider ── */
+  .row-gap { margin-bottom: 24px; }
+
+  /* ── Wins list in agents ── */
+  .win-item { display: flex; gap: 10px; padding: 10px 14px; background: rgba(74,122,90,0.04); border: 0.5px solid rgba(74,122,90,0.18); border-radius: 8px; margin-bottom: 8px; }
+  .win-icon { color: var(--green); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .win-text { font-size: 13px; line-height: 1.6; }
+
+  /* ── Opportunities ── */
+  .opp-card { background: white; border: 0.5px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; }
+  .opp-title { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .opp-text { font-size: 13px; color: var(--stone); line-height: 1.6; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(26,26,26,0.15); border-radius: 10px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    :root { --sidebar-w: 200px; }
+    .main-content { padding: 24px 20px; }
+    .pagespeed-grid { grid-template-columns: repeat(2,1fr); }
+    .ba-body { grid-template-columns: 1fr; }
+    .ba-col:first-child { border-right: none; border-bottom: 0.5px solid var(--border); }
+    .meta-grid { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: repeat(2,1fr); }
+    .tracking-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ UPLOAD SCREEN ═══ -->
+<div id="upload-screen">
+  <div class="upload-logo">
+    <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="20" r="16" fill="none" stroke="#C8313A" stroke-width="2"/>
+      <circle cx="20" cy="20" r="6" fill="#C8313A"/>
+    </svg>
+    <div class="upload-logo-text">
+      <div class="wordmark">lanterne</div>
+      <div class="sub">ROUGE</div>
+    </div>
+  </div>
+  <div class="upload-card">
+    <h2>Load Audit Report</h2>
+    <p>Select the JSON export from your site audit to load the interactive dashboard.</p>
+    <label for="file-input" class="upload-btn">Select JSON File</label>
+    <input type="file" id="file-input" accept=".json,application/json">
+    <div class="upload-note">File is read locally — nothing is uploaded.</div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="dashboard">
+  <header class="dash-header">
+    <div class="dash-logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="11" fill="none" stroke="#C8313A" stroke-width="1.8"/>
+        <circle cx="14" cy="14" r="4.5" fill="#C8313A"/>
+      </svg>
+      <div class="dash-logo-text">
+        <div class="wm">lanterne rouge</div>
+      </div>
+    </div>
+    <div class="dash-site-url"><a id="hdr-url" href="#" target="_blank"></a></div>
+    <div class="dash-meta" id="hdr-meta"></div>
+  </header>
+
+  <div class="dash-body">
+    <nav class="sidebar" id="sidebar"></nav>
+    <main class="main-content" id="main-content"></main>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════
+
+function scoreColor(s) {
+  if (s < 40) return 'var(--red)';
+  if (s < 65) return 'var(--amber)';
+  return 'var(--green)';
+}
+function scorePillClass(s) {
+  if (s < 40) return 'poor';
+  if (s < 65) return 'mid';
+  return 'good';
+}
+function scoreRing(score, label, size = 80) {
+  const r = size * 0.42;
+  const circ = 2 * Math.PI * r;
+  const filled = (score / 100) * circ;
+  const c = scoreColor(score);
+  return `
+    <div class="score-ring-wrap">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${c}20" stroke-width="5"/>
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${c}" stroke-width="5"
+          stroke-dasharray="${filled} ${circ}" stroke-linecap="round"
+          transform="rotate(-90 ${size/2} ${size/2})"/>
+        <text x="${size/2}" y="${size/2 + 2}" text-anchor="middle" dominant-baseline="middle"
+          font-size="${size*0.22}" fill="${c}" font-weight="400">${score}</text>
+      </svg>
+      ${label ? `<div class="score-ring-label">${label}</div>` : ''}
+    </div>`;
+}
+function dimBar(score) {
+  const c = scoreColor(score * 10);
+  return `<div class="dim-bar-wrap"><div class="dim-bar" style="width:${score*10}%;background:${c}"></div></div>`;
+}
+function severity(s) {
+  const map = { critical:'sev-critical', high:'sev-high', medium:'sev-medium', low:'sev-low' };
+  return `<span class="severity-badge ${map[(s||'low').toLowerCase()] || 'sev-low'}">${s}</span>`;
+}
+function revImpact(label) {
+  const s = (label||'').toLowerCase();
+  const cls = s.includes('high') ? 'rev-high' : s.includes('medium') ? 'rev-medium' : 'rev-low';
+  return `<span class="rev-impact ${cls}">${label}</span>`;
+}
+function e(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(ts) {
+  try { return new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); }
+  catch { return ts; }
+}
+function agent(data, key) {
+  return (data.agents || []).find(a => a.key === key) || null;
+}
+function agentResult(data, key) {
+  const a = agent(data, key);
+  return a ? (a.result || {}) : {};
+}
+
+// ═══════════════════════════════════════════
+// Section builders
+// ═══════════════════════════════════════════
+
+function buildOverview(data) {
+  const s = data.summary || {};
+  const pm = data.pageMetadata || {};
+  const priorities = s.top_priorities || [];
+  const quickWins = s.quick_wins || [];
+  const pages = data.pagesAnalyzed || [];
+
+  // Composite score + per-section scores for the mini ring row
+  const agents = data.agents || [];
+  const scoredAgents = agents.filter(a => a.score != null && a.label);
+
+  let ringRow = scoredAgents.map(a =>
+    `<div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+      ${scoreRing(a.score, '', 64)}
+      <div style="font-size:11px;color:var(--stone);text-align:center;max-width:80px">${e(a.label)}</div>
+    </div>`
+  ).join('');
+
+  let prioritiesHtml = priorities.map(p => `
+    <div class="priority-card">
+      <div class="priority-num">${p.rank || ''}</div>
+      <div>
+        <div class="priority-area">${e(p.area)}</div>
+        <div class="priority-finding">${e(p.finding)}</div>
+        <div class="priority-action">${e(p.action)}</div>
+      </div>
+    </div>`).join('');
+
+  let quickWinsHtml = quickWins.map(w => `<li>${e(w)}</li>`).join('');
+
+  // Page metadata
+  let h1s = (pm.h1s || []).map(h => `<span class="meta-tag">${e(h)}</span>`).join(' ');
+  let signals = [];
+  if (pm.hasOgTags) signals.push('OG Tags');
+  if (pm.hasStructuredData) signals.push('Structured Data');
+  let signalsHtml = signals.map(s => `<span class="meta-tag">${e(s)}</span>`).join(' ') || '<span style="color:var(--stone);font-size:12px">None detected</span>';
+
+  let pagesHtml = pages.map(p => `
+    <tr>
+      <td>${e(p.url)}</td>
+      <td>${e(p.status)}</td>
+      <td>${e(String(p.chars || ''))}${p.chars ? ' chars' : ''}</td>
+      <td>${(p.agents||[]).map(a=>`<span class="agent-tag">${e(a)}</span>`).join('')}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="section-header">
+      <h1>${e(data.url || 'Site Audit')}</h1>
+      <div style="font-size:13px;color:var(--stone);margin-top:4px">
+        ${data.auditor ? `Audited by ${e(data.auditor)}` : ''}
+        ${data.timestamp ? ` &middot; ${fmtDate(data.timestamp)}` : ''}
+        ${data.connected === false ? ' &middot; <span style="color:var(--amber)">GA4/GSC not connected</span>' : data.connected ? ' &middot; <span style="color:var(--green)">GA4/GSC connected</span>' : ''}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:28px">
+      ${scoreRing(data.compositeScore || 0, 'Composite', 96)}
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;gap:20px;flex-wrap:wrap">${ringRow}</div>
+      </div>
+    </div>
+
+    ${s.overall_verdict ? `
+    <div class="card row-gap">
+      <div class="card-title">Overall Verdict</div>
+      <div class="verdict-text">${e(s.overall_verdict)}</div>
+      ${s.biggest_strength ? `
+      <div style="margin-top:14px;padding:12px 16px;border-radius:8px;background:rgba(74,122,90,0.06);border:0.5px solid rgba(74,122,90,0.2)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--green);margin-bottom:4px">Biggest Strength</div>
+        <div style="font-size:13px;line-height:1.6">${e(s.biggest_strength)}</div>
+      </div>` : ''}
+    </div>` : ''}
+
+    ${priorities.length ? `
+    <div class="row-gap">
+      <div class="card-title">Top Priorities</div>
+      ${prioritiesHtml}
+    </div>` : ''}
+
+    ${quickWins.length ? `
+    <div class="card row-gap">
+      <div class="card-title">Quick Wins</div>
+      <ul class="wins-list">${quickWinsHtml}</ul>
+    </div>` : ''}
+
+    <div class="card row-gap">
+      <div class="card-title">Page Metadata</div>
+      <div class="meta-grid">
+        <div class="meta-item"><div class="meta-key">Title</div><div class="meta-val">${e(pm.title || '—')}</div></div>
+        <div class="meta-item"><div class="meta-key">Canonical</div><div class="meta-val" style="font-size:12px">${e(pm.canonical || '—')}</div></div>
+        <div class="meta-item"><div class="meta-key">H1s</div><div class="meta-val">${h1s || '—'}</div></div>
+        <div class="meta-item"><div class="meta-key">Word Count</div><div class="meta-val">${pm.wordCount ? '~' + Number(pm.wordCount).toLocaleString() : '—'}</div></div>
+        <div class="meta-item" style="grid-column:1/-1"><div class="meta-key">Meta Description</div><div class="meta-val" style="font-size:12px;color:var(--stone)">${e((pm.metaDescription||'').substring(0,300))}</div></div>
+        <div class="meta-item"><div class="meta-key">Robots</div><div class="meta-val" style="font-size:12px">${e(pm.metaRobots || '—')}</div></div>
+        <div class="meta-item"><div class="meta-key">Signals</div><div class="meta-val">${signalsHtml}</div></div>
+      </div>
+    </div>
+
+    ${pages.length ? `
+    <div class="card">
+      <div class="card-title">Interior Pages Analyzed</div>
+      <table class="pages-table">
+        <thead><tr><th>URL</th><th>Status</th><th>Size</th><th>Agents</th></tr></thead>
+        <tbody>${pagesHtml}</tbody>
+      </table>
+    </div>` : ''}`;
+}
+
+function buildAgentSection(data, key) {
+  const a = agent(data, key);
+  if (!a) return '<div class="card"><p style="color:var(--stone)">No data available for this section.</p></div>';
+  const r = a.result || {};
+
+  const dims = r.dimensions || [];
+  let dimsHtml = dims.map(d => `
+    <div>
+      <div class="dim-row">
+        <div class="dim-name">${e(d.name)}</div>
+        ${dimBar(d.score)}
+        <div class="dim-score" style="color:${scoreColor(d.score*10)}">${d.score}/10</div>
+      </div>
+      ${d.finding ? `<div class="dim-finding">${e(d.finding)}</div>` : ''}
+    </div>`).join('');
+
+  const wins = r.wins || r.strengths || [];
+  let winsHtml = wins.map(w => `
+    <div class="win-item"><div class="win-icon">✓</div><div class="win-text">${e(w)}</div></div>`).join('');
+
+  const fixes = r.critical_fixes || [];
+  let fixesHtml = fixes.map(f => `<li>${e(f)}</li>`).join('');
+
+  const bl = r.biggest_lever || {};
+  let leverHtml = (bl.recommendation || bl.finding) ? `
+    <div class="card row-gap">
+      <div class="card-title">Biggest Lever</div>
+      <div class="biggest-lever-box">
+        <div class="lever-rec">${e(bl.recommendation || bl.finding)}</div>
+        ${bl.why ? `<div class="lever-why">${e(bl.why)}</div>` : ''}
+      </div>
+    </div>` : '';
+
+  let extraHtml = '';
+
+  // Content section extras: before/after
+  if (key === 'content') {
+    const ba = r.before_after || [];
+    if (ba.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">Copy Rewrites</div>`;
+      ba.forEach(item => {
+        extraHtml += `
+          <div class="ba-card">
+            <div class="ba-header">${e(item.element)}</div>
+            <div class="ba-body">
+              <div class="ba-col"><div class="ba-col-label">Before</div><div class="ba-col-text">${e(item.before)}</div></div>
+              <div class="ba-col"><div class="ba-col-label">After</div><div class="ba-col-text after">${e(item.after)}</div></div>
+            </div>
+            ${item.why ? `<div class="ba-why">${e(item.why)}</div>` : ''}
+          </div>`;
+      });
+      extraHtml += '</div>';
+    }
+  }
+
+  // Conversion extras: funnel leaks + AB tests
+  if (key === 'conversion') {
+    const leaks = r.funnel_leaks || [];
+    if (leaks.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">Funnel Leaks</div>`;
+      leaks.forEach(l => {
+        extraHtml += `
+          <div class="leak-card">
+            <div>${severity(l.severity)}<div class="leak-stage" style="margin-top:6px">${e(l.stage||'')}</div></div>
+            <div>
+              <div class="leak-issue">${e(l.issue)}</div>
+              ${l.fix ? `<div class="leak-fix">${e(l.fix)}</div>` : ''}
+            </div>
+          </div>`;
+      });
+      extraHtml += '</div>';
+    }
+    const qw = r.quick_wins || [];
+    if (qw.length) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">Quick Wins</div><ul class="wins-list">${qw.map(w=>`<li>${e(w)}</li>`).join('')}</ul></div>`;
+    }
+    const ab = r.ab_tests || [];
+    if (ab.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">A/B Test Ideas</div>`;
+      ab.forEach(t => {
+        extraHtml += `
+          <div class="ab-card">
+            <div class="ab-hyp">${e(t.hypothesis)}</div>
+            <div class="ab-meta">
+              ${t.metric ? `<div class="ab-meta-item"><span>Metric</span>${e(t.metric)}</div>` : ''}
+              ${t.impact ? `<div class="ab-meta-item"><span>Impact</span>${e(t.impact)}</div>` : ''}
+            </div>
+          </div>`;
+      });
+      extraHtml += '</div>';
+    }
+  }
+
+  // SEO extras: pagespeed, tracking, technical issues, quick wins
+  if (key === 'technical') {
+    const ps = r.pagespeed || r.page_speed || {};
+    if (Object.keys(ps).length) {
+      const scoreFields = ['performance','accessibility','seo','best_practices','bestPractices','best practices'];
+      const cwvFields   = ['lcp','cls','tbt','fcp','tti','ttfb'];
+      let psCards = '';
+      const labels = { performance:'Performance', accessibility:'Accessibility', seo:'SEO', best_practices:'Best Practices', bestPractices:'Best Practices' };
+      scoreFields.forEach(f => {
+        if (ps[f] != null) {
+          psCards += `<div class="ps-card"><div class="ps-label">${labels[f]||f}</div><div class="ps-score" style="color:${scoreColor(ps[f])}">${ps[f]}</div></div>`;
+        }
+      });
+      let cwvItems = '';
+      cwvFields.forEach(f => {
+        if (ps[f] != null) cwvItems += `<div class="cwv-item"><div class="cwv-val">${ps[f]}</div><div class="cwv-key">${f.toUpperCase()}</div></div>`;
+      });
+      if (psCards || cwvItems) {
+        extraHtml += `<div class="card row-gap"><div class="card-title">PageSpeed Insights</div>
+          ${psCards ? `<div class="pagespeed-grid">${psCards}</div>` : ''}
+          ${cwvItems ? `<div class="cwv-row">${cwvItems}</div>` : ''}
+        </div>`;
+      }
+    }
+
+    const trackingRaw = r.tracking_status || r.trackingStatus || [];
+    const trackingArr = Array.isArray(trackingRaw)
+      ? trackingRaw
+      : Object.entries(trackingRaw).map(([k, v]) => (typeof v === 'object' ? { tool: k, ...v } : { tool: k, present: null, notes: v }));
+    if (trackingArr.length) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">Tracking Status</div><div class="tracking-grid">`;
+      trackingArr.forEach(item => {
+        const label = item.tool || item.name || '';
+        const present = item.present;
+        const dotCls = present === true ? 'tdot-present' : present === false ? 'tdot-missing' : 'tdot-partial';
+        const statusLabel = present === true ? 'Installed' : present === false ? 'Not detected' : 'Partial';
+        const note = item.notes || item.note || '';
+        extraHtml += `<div class="tracking-row">
+          <div class="tracking-label">${e(label)}</div>
+          <div class="tracking-status"><div class="tracking-dot ${dotCls}"></div>${e(statusLabel)}</div>
+          ${note ? `<div class="tracking-note">${e(note)}</div>` : ''}
+        </div>`;
+      });
+      extraHtml += '</div></div>';
+    }
+
+    const issues = r.technical_issues || r.technicalIssues || [];
+    if (issues.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">Technical Issues</div>`;
+      issues.forEach(i => {
+        const sev = i.severity || i.level || 'medium';
+        extraHtml += `
+          <div class="leak-card">
+            <div>${severity(sev)}</div>
+            <div>
+              <div class="leak-issue"><strong>${e(i.title||i.issue||'')}</strong>${i.detail||i.description ? '<br><span style="font-size:12px;color:var(--stone)">'+e(i.detail||i.description)+'</span>' : ''}</div>
+              ${i.fix||i.recommendation ? `<div class="leak-fix">${e(i.fix||i.recommendation)}</div>` : ''}
+            </div>
+          </div>`;
+      });
+      extraHtml += '</div>';
+    }
+
+    const sqw = r.seo_quick_wins || r.quick_wins || [];
+    if (sqw.length) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">SEO Quick Wins</div><ul class="wins-list">${sqw.map(w=>`<li>${e(w)}</li>`).join('')}</ul></div>`;
+    }
+  }
+
+  // Competitive extras: competitors, opportunities, recommended actions
+  if (key === 'competitive') {
+    const comps = r.competitors || [];
+    if (comps.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">Competitors</div>`;
+      comps.forEach(c => {
+        extraHtml += `
+          <div class="competitor-card">
+            <div class="comp-name">${e(c.name||c.domain||'')}</div>
+            <div class="comp-sw-grid">
+              ${c.strength ? `<div class="comp-sw comp-str"><div class="comp-sw-label">Strength</div><div class="comp-sw-text">${e(c.strength)}</div></div>` : ''}
+              ${c.weakness ? `<div class="comp-sw comp-wk"><div class="comp-sw-label">Weakness</div><div class="comp-sw-text">${e(c.weakness)}</div></div>` : ''}
+            </div>
+          </div>`;
+      });
+      extraHtml += '</div>';
+    }
+    const opps = r.opportunities || [];
+    if (opps.length) {
+      extraHtml += `<div class="row-gap"><div class="card-title">Opportunities</div>`;
+      opps.forEach(o => {
+        const title = typeof o === 'string' ? o : (o.title||o.opportunity||'');
+        const text  = typeof o === 'string' ? '' : (o.description||o.detail||o.text||'');
+        extraHtml += `<div class="opp-card"><div class="opp-title">${e(title)}</div>${text?`<div class="opp-text">${e(text)}</div>`:''}</div>`;
+      });
+      extraHtml += '</div>';
+    }
+    const actions = r.recommended_actions || r.recommendations || [];
+    if (actions.length) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">Recommended Actions</div><ul class="wins-list">${actions.map(a=>`<li>${e(typeof a==='string'?a:(a.action||a.text||JSON.stringify(a)))}</li>`).join('')}</ul></div>`;
+    }
+  }
+
+  // Strategy/brand extras: revenue opportunities, brand + growth scores
+  if (key === 'strategy') {
+    const ro = r.revenue_opportunities || {};
+    const tiers = [
+      { key: 'quick_wins', label: 'Quick Wins' },
+      { key: 'medium_term', label: 'Medium Term' },
+      { key: 'strategic', label: 'Strategic' },
+    ];
+    let hasRevOpp = false;
+    let revHtml = '';
+    tiers.forEach(t => {
+      const items = ro[t.key] || [];
+      if (!items.length) return;
+      hasRevOpp = true;
+      revHtml += `<div class="rev-section"><div class="rev-section-title">${t.label}</div>`;
+      items.forEach(item => {
+        const text = typeof item === 'string' ? item : (item.text||item.action||item.description||'');
+        const impact = typeof item === 'object' ? (item.impact||item.level||'') : '';
+        const why = typeof item === 'object' ? (item.why||item.outcome||'') : '';
+        revHtml += `<div class="rev-item">
+          <div class="rev-item-header">${impact?revImpact(impact):''}<div style="font-size:13px;line-height:1.5">${e(text)}</div></div>
+          ${why?`<div class="rev-item-why">${e(why)}</div>`:''}
+        </div>`;
+      });
+      revHtml += '</div>';
+    });
+    if (hasRevOpp) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">Revenue Opportunities</div>${revHtml}</div>`;
+    }
+
+    const bScore = r.brand_score;
+    const gScore = r.growth_score;
+    if (bScore != null || gScore != null) {
+      extraHtml += `<div class="card row-gap"><div class="card-title">Brand vs Growth</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+          ${bScore != null ? scoreRing(bScore, 'Brand Score', 80) : ''}
+          ${gScore != null ? scoreRing(gScore, 'Growth Score', 80) : ''}
+        </div>
+      </div>`;
+    }
+  }
+
+  return `
+    <div class="section-header">
+      <h1>${e(a.label)}</h1>
+    </div>
+
+    <div style="display:flex;gap:20px;align-items:center;margin-bottom:24px;flex-wrap:wrap">
+      ${scoreRing(a.score || 0, 'Score', 80)}
+      <div style="flex:1;min-width:200px">
+        ${dims.length ? `<div class="dimensions-grid">${dimsHtml}</div>` : ''}
+      </div>
+    </div>
+
+    ${wins.length ? `
+    <div class="card row-gap">
+      <div class="card-title">Strengths</div>
+      ${winsHtml}
+    </div>` : ''}
+
+    ${fixes.length ? `
+    <div class="card row-gap">
+      <div class="card-title">Critical Fixes</div>
+      <ul class="fixes-list">${fixesHtml}</ul>
+    </div>` : ''}
+
+    ${extraHtml}
+    ${leverHtml}`;
+}
+
+// ── Markdown context renderer ─────────────────────────────────────────────
+// gscContext and ga4Context are raw markdown strings. Parse them into cards.
+
+function parseBold(str) {
+  return e(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function parseMdTable(lines) {
+  // lines[0] = header, lines[1] = separator, lines[2+] = rows
+  const parse = line => line.split('|').map(c => c.trim()).filter((c,i,a) => i>0 && i<a.length-1);
+  const headers = parse(lines[0]);
+  const rows = lines.slice(2).map(parse);
+  if (!headers.length) return '';
+  return `<table class="data-table">
+    <thead><tr>${headers.map(h=>`<th>${e(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td style="font-size:12px">${e(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function renderMarkdownContext(md, pageTitle) {
+  if (!md || typeof md !== 'string') return '';
+  const lines = md.split('\n');
+  let html = `<div class="section-header"><h1>${e(pageTitle)}</h1></div>`;
+
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i];
+    const line = raw.trim();
+
+    if (!line) { i++; continue; }
+
+    // H2 — top-level heading, use as a section label (skip the redundant title)
+    if (line.startsWith('## ')) {
+      const heading = line.replace(/^## /, '');
+      html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--stone);margin:20px 0 10px">${e(heading)}</div>`;
+      i++; continue;
+    }
+
+    // H3 — sub-heading, possibly followed by a table
+    if (line.startsWith('### ')) {
+      const heading = line.replace(/^### /, '');
+      // Look ahead for a table
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++; // skip blank
+      if (j < lines.length && lines[j].trim().startsWith('|')) {
+        const tableLines = [];
+        while (j < lines.length && lines[j].trim().startsWith('|')) {
+          tableLines.push(lines[j]); j++;
+        }
+        html += `<div class="card row-gap"><div class="card-title">${e(heading)}</div>${parseMdTable(tableLines)}</div>`;
+        i = j; continue;
+      } else {
+        html += `<div class="card-title" style="margin:16px 0 8px">${e(heading)}</div>`;
+        i++; continue;
+      }
+    }
+
+    // Standalone pipe table
+    if (line.startsWith('|')) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableLines.push(lines[i]); i++;
+      }
+      html += `<div class="card row-gap">${parseMdTable(tableLines)}</div>`;
+      continue;
+    }
+
+    // Bold key-value lines: **Key:** value  — collect a run and render as stat pills
+    if (line.startsWith('**')) {
+      const kvLines = [];
+      while (i < lines.length && lines[i].trim().startsWith('**')) {
+        kvLines.push(lines[i].trim()); i++;
+      }
+      // Parse each: **Label:** value
+      const pairs = kvLines.map(l => {
+        const m = l.match(/^\*\*(.+?)[:：]\*\*\s*(.+)$/);
+        return m ? { label: m[1], val: m[2] } : null;
+      }).filter(Boolean);
+      if (pairs.length) {
+        html += `<div class="card row-gap"><div style="display:flex;flex-wrap:wrap;gap:10px">
+          ${pairs.map(p => `<div class="stat-item" style="min-width:160px;flex:1">
+            <div class="stat-val" style="font-size:17px;word-break:break-word">${e(p.val)}</div>
+            <div class="stat-label">${e(p.label)}</div>
+          </div>`).join('')}
+        </div></div>`;
+      } else {
+        // Couldn't parse — just render as text
+        kvLines.forEach(l => { html += `<p style="font-size:13px;margin-bottom:6px">${parseBold(l)}</p>`; });
+      }
+      continue;
+    }
+
+    // Plain text / list items
+    html += `<p style="font-size:13px;color:var(--stone);line-height:1.6;margin-bottom:6px">${parseBold(line)}</p>`;
+    i++;
+  }
+
+  return html;
+}
+
+function buildGSC(data) {
+  const g = data.gscContext;
+  if (!g) return '<div class="card"><p style="color:var(--stone);font-size:13px">Google Search Console data was not connected for this audit.</p></div>';
+  if (typeof g === 'string') return renderMarkdownContext(g, 'Search Console');
+  // Fallback for structured object (future-proofing)
+  return `<div class="section-header"><h1>Search Console</h1></div><div class="card"><pre style="font-size:12px;overflow:auto">${e(JSON.stringify(g,null,2))}</pre></div>`;
+}
+
+function buildGA4(data) {
+  const g = data.ga4Context;
+  if (!g) return '<div class="card"><p style="color:var(--stone);font-size:13px">Google Analytics 4 data was not connected for this audit.</p></div>';
+  if (typeof g === 'string') return renderMarkdownContext(g, 'Google Analytics 4');
+  // Fallback for structured object (future-proofing)
+  return `<div class="section-header"><h1>Google Analytics 4</h1></div><div class="card"><pre style="font-size:12px;overflow:auto">${e(JSON.stringify(g,null,2))}</pre></div>`;
+}
+
+
+// ═══════════════════════════════════════════
+// Navigation + Rendering
+// ═══════════════════════════════════════════
+
+function buildNav(data) {
+  const sidebar = document.getElementById('sidebar');
+  const agents = data.agents || [];
+
+  const navSections = [
+    { id: 'overview', label: 'Overview', score: data.compositeScore },
+  ];
+
+  const agentNav = [
+    { key: 'content',     label: 'Content & Messaging' },
+    { key: 'conversion',  label: 'Conversion / CRO' },
+    { key: 'competitive', label: 'Competitive' },
+    { key: 'technical',   label: 'SEO & Technical' },
+    { key: 'strategy',    label: 'Brand & Growth' },
+  ];
+  agentNav.forEach(n => {
+    const a = agents.find(x => x.key === n.key);
+    navSections.push({ id: n.key, label: n.label, score: a ? a.score : null });
+  });
+
+  // Data sections
+  if (data.ga4Context) navSections.push({ id: 'ga4', label: 'GA4 Data' });
+  if (data.gscContext) navSections.push({ id: 'gsc', label: 'Search Console' });
+
+  sidebar.innerHTML = `
+    <div class="sidebar-section">
+      <div class="sidebar-label">Report</div>
+      ${navSections.map(s => `
+        <button class="sidebar-link${s.id==='overview'?' active':''}" data-section="${s.id}">
+          ${e(s.label)}
+          ${s.score != null ? `<span class="score-pill ${scorePillClass(s.score)}">${s.score}</span>` : ''}
+        </button>`).join('')}
+    </div>`;
+
+  sidebar.querySelectorAll('.sidebar-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      showSection(btn.dataset.section);
+      sidebar.querySelectorAll('.sidebar-link').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+}
+
+const sectionCache = {};
+
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById('sec-' + id);
+  if (target) target.classList.add('active');
+}
+
+function render(data) {
+  // Header
+  const hdrUrl = document.getElementById('hdr-url');
+  hdrUrl.href = data.url || '#';
+  hdrUrl.textContent = data.url || '';
+  document.getElementById('hdr-meta').innerHTML =
+    `${data.auditor ? e(data.auditor) + '<br>' : ''}${data.timestamp ? fmtDate(data.timestamp) : ''}`;
+
+  buildNav(data);
+
+  const main = document.getElementById('main-content');
+  const agents = data.agents || [];
+  const agentKeys = ['content', 'conversion', 'competitive', 'technical', 'strategy'];
+
+  const sections = [
+    { id: 'overview',     html: buildOverview(data) },
+    ...agentKeys.map(key => ({ id: key, html: buildAgentSection(data, key) })),
+    ...(data.ga4Context ? [{ id: 'ga4', html: buildGA4(data) }] : []),
+    ...(data.gscContext  ? [{ id: 'gsc', html: buildGSC(data) }] : []),
+  ];
+
+  main.innerHTML = sections.map(s =>
+    `<div id="sec-${s.id}" class="section${s.id==='overview'?' active':''}">${s.html}</div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════════════
+// File loading
+// ═══════════════════════════════════════════
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const data = JSON.parse(evt.target.result);
+      document.getElementById('upload-screen').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      render(data);
+    } catch(err) {
+      alert('Could not parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+
+<style>
+  .brand-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 2rem 2rem 1.5rem; margin-bottom: 1.5rem; }
+  .brand-name { font-size: 22px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 4px; }
+  .brand-sub { font-size: 13px; color: var(--color-text-secondary); margin: 0 0 1.5rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .palette-row { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+  .swatch { width: 36px; height: 36px; border-radius: 4px; }
+  .swatch-label { font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; text-align: center; }
+  .swatch-wrap { display: flex; flex-direction: column; align-items: center; }
+  .type-row { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .type-sample { flex: 1; min-width: 160px; }
+  .type-label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .usage-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .tag { font-size: 12px; padding: 4px 10px; border-radius: var(--border-radius-md); background: var(--color-background-secondary); color: var(--color-text-secondary); border: 0.5px solid var(--color-border-tertiary); }
+  .divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 1.5rem 0; }
+  .note { font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; margin: 0; }
+  .glyph-row { display: flex; gap: 2rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .glyph-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .glyph-item-label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+</style>
+
+<div class="brand-card">
+  <div class="brand-name">Signal — revised</div>
+  <div class="brand-sub">Circular glyph · Serif wordmark · Parchment palette</div>
+
+  <div style="margin-bottom: 2rem;">
+    <svg width="260" height="56" viewBox="0 0 260 56" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="28" r="14" fill="none" stroke="#C8313A" stroke-width="2"/>
+      <circle cx="20" cy="28" r="5.5" fill="#C8313A"/>
+      <text x="44" y="34" font-family="Georgia, 'Times New Roman', serif" font-size="24" font-weight="400" fill="var(--color-text-primary, #1a1a1a)" letter-spacing="-0.5">lanterne</text>
+      <text x="44" y="50" font-family="Georgia, 'Times New Roman', serif" font-size="12" font-weight="400" fill="#8a7d6e" letter-spacing="4.5">ROUGE</text>
+    </svg>
+  </div>
+
+  <div class="palette-row">
+    <div class="swatch-wrap"><div class="swatch" style="background:#1a1a1a;"></div><div class="swatch-label">Ink</div></div>
+    <div class="swatch-wrap"><div class="swatch" style="background:#C8313A;"></div><div class="swatch-label">Lanterne</div></div>
+    <div class="swatch-wrap"><div class="swatch" style="background:#f5f1ec;"></div><div class="swatch-label">Parchment</div></div>
+    <div class="swatch-wrap"><div class="swatch" style="background:#8a7d6e;"></div><div class="swatch-label">Stone</div></div>
+    <div class="swatch-wrap"><div class="swatch" style="background:#2d2d2d;"></div><div class="swatch-label">Asphalt</div></div>
+  </div>
+
+  <hr class="divider">
+
+  <div style="margin-bottom: 1rem;">
+    <div class="type-label" style="margin-bottom: 1rem;">Glyph variations</div>
+    <div class="glyph-row">
+      <div class="glyph-item">
+        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="#C8313A" stroke-width="2.5"/>
+          <circle cx="24" cy="24" r="7" fill="#C8313A"/>
+        </svg>
+        <div class="glyph-item-label">Standard</div>
+      </div>
+      <div class="glyph-item">
+        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="20" fill="#C8313A"/>
+          <circle cx="24" cy="24" r="7" fill="#f5f1ec"/>
+        </svg>
+        <div class="glyph-item-label">Filled</div>
+      </div>
+      <div class="glyph-item">
+        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="#1a1a1a" stroke-width="2.5"/>
+          <circle cx="24" cy="24" r="7" fill="#1a1a1a"/>
+        </svg>
+        <div class="glyph-item-label">Ink (mono)</div>
+      </div>
+      <div class="glyph-item">
+        <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="#f5f1ec" stroke-width="2.5"/>
+          <circle cx="24" cy="24" r="7" fill="#f5f1ec"/>
+        </svg>
+        <div class="glyph-item-label" style="color: var(--color-text-secondary);">Reversed</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="type-row">
+    <div class="type-sample">
+      <div class="type-label">Wordmark only</div>
+      <div style="font-family: Georgia, serif; font-size: 18px; color: var(--color-text-primary); letter-spacing: -0.3px;">lanterne rouge</div>
+    </div>
+    <div class="type-sample">
+      <div class="type-label">Stacked compact</div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="11" cy="11" r="9" fill="none" stroke="#C8313A" stroke-width="1.5"/>
+          <circle cx="11" cy="11" r="3.5" fill="#C8313A"/>
+        </svg>
+        <div>
+          <div style="font-family: Georgia, serif; font-size: 13px; font-weight: 400; color: var(--color-text-primary); line-height: 1.1;">lanterne</div>
+          <div style="font-family: Georgia, serif; font-size: 8px; letter-spacing: 3px; color: #8a7d6e; line-height: 1.1;">ROUGE</div>
+        </div>
+      </div>
+    </div>
+    <div class="type-sample">
+      <div class="type-label">Favicon scale</div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#f5f1ec"/>
+          <circle cx="16" cy="16" r="10" fill="none" stroke="#C8313A" stroke-width="2"/>
+          <circle cx="16" cy="16" r="4" fill="#C8313A"/>
+        </svg>
+        <svg width="16" height="16" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#C8313A"/>
+          <circle cx="16" cy="16" r="10" fill="none" stroke="#f5f1ec" stroke-width="2.5"/>
+          <circle cx="16" cy="16" r="4" fill="#f5f1ec"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <p class="note">The glyph holds at small sizes — favicon, app icon, social avatar — without losing legibility. The parchment square gives it a home that doesn't read as generic tech. Red-on-parchment fills in contexts where the outline version gets lost.</p>
+</div>
