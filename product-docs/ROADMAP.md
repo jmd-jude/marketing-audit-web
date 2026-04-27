@@ -1,19 +1,8 @@
 # Marketing Intelligence — Product Roadmap
 
-## Tier Model (Conceptual)
-
-| Tier | Data Sources | Price Signal | Status |
-|---|---|---|---|
-| **Standard** | Page HTML + PageSpeed Insights | Base | Shipped |
-| **Connected** | + GA4 + Search Console | ~5x | Shipped |
-| **Professional** | + DataForSEO Labs (domain rank + competitors) | ~10x | Shipped (Labs only — Backlinks deferred) |
-| **Agency** | + SEMrush/Ahrefs + Klaviyo + Meta Ads | Custom | Roadmap |
-
----
-
 ## Backlog
 
-### Tier 1 — No Auth Required (Low Effort, High Impact)
+### No Auth Required
 
 - [ ] **Meta Ads Library integration**
   Publicly accessible API. Show whether the site is running paid social, rough creative direction, ad volume signals. No auth needed. Adds a "Paid Media" dimension to the audit.
@@ -33,7 +22,7 @@
 
 ---
 
-### Tier 2 — Client Grants Access (OAuth / Service Account)
+### Google Service Account
 
 - [x] **Google Analytics 4 API**
   Operator connects their Google account (which has viewer access to client's GA4 property). Unlocks: real traffic volumes, channel breakdown, conversion rates, bounce rates, session data. Transforms the growth/strategy agent from inference to evidence.
@@ -49,11 +38,23 @@
 
 ---
 
-### Tier 2.5 — Professional Tier (DataForSEO)
+### DataForSEO
 
 - [x] **DataForSEO Labs integration** — domain rank overview + competitors domain
   `/api/competitive-data` route (Node runtime, mirrors `/api/connected-data` pattern). Two parallel Labs endpoints: `domain_rank_overview/live` (organic traffic, keyword count, ranking positions, momentum signals) + `competitors_domain/live` (top 10 competitors by keyword overlap, traffic estimates, avg SERP position). `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Graceful degradation if credentials missing. `competitive: true` flag on SSE `fetched` event. DataSourcesPanel shows Professional tier as active when DataForSEO data was returned.
   _Status: Shipped — credentials: `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` in `.env.local`_
+
+- [x] **DataForSEO `/ranked_keywords/live`** — keyword-level resolution for position buckets
+  Third parallel endpoint call in `/api/competitive-data`. Filters positions 4–20, limit 25, sorted by search volume descending. Gives agents the specific keywords behind the position-4–10 bucket rather than aggregate counts. Routes to technical + strategy agents (`KEYWORDS_AGENTS`). Technical agent prompt updated to reference specific keywords and volumes. Strategy agent Step 3 updated to treat the keyword list as ground truth when GSC is unavailable.
+  _Status: Shipped — `app/api/competitive-data/route.ts`, `lib/agents.ts`_
+
+- [x] **Query-to-conversion chain in GA4** — link organic queries to converting sessions
+  New `conversionsBySourceMedium` field in `Ga4Data` using `sessionSourceMedium` dimension + conversion metrics. Formatted as its own table in GA4 context below the channel-level conversions table. Routes to the conversion agent. Conversion agent prompt updated to use source/medium rows when they reveal patterns the channel-level data obscures.
+  _Status: Shipped — `lib/gsc-ga4.ts`, `lib/agents.ts`_
+
+- [x] **GSC + DataForSEO position reconciliation prompt** — surface discrepancies between data sources
+  GSC tracks positions based on actual impressions served to users. DataForSEO tracks positions from its own crawl. These diverge regularly due to geo, personalization, and crawl timing. No new data is needed — this is a prompt engineering task: instruct the strategy agent to flag when a keyword appears in DataForSEO rankings but has zero GSC impressions. A mismatch signals geo targeting issues, personalization artifacts, or cannibalization.
+  _Status: Shipped — Step 3 in strategy agent diagnostic approach (`lib/agents.ts`)_
 
 - [ ] **DataForSEO Backlinks API** — domain authority + link profile health
   `backlinks/summary/live` endpoint: domain rank (0–1000), referring domains, spam score, broken backlinks. Routes to technical + competitive agents. Deprioritized — requires $100 minimum commitment in DataForSEO dashboard. Infrastructure is ready to add when committed.
@@ -65,7 +66,7 @@
 
 ---
 
-### Tier 3 — Agency Subscription Tools (API Keys / MCPs)
+### Third-Party Subscriptions
 
 - [ ] **SEMrush or Ahrefs API**
   Backlink profile, keyword gap vs. competitors, domain authority, traffic estimates. Requires agency subscription + API key. Could be wrapped as an MCP server.
@@ -87,6 +88,18 @@
 
 ### Analysis Quality
 
+- [x] **`hasStructuredData` fix on Firecrawl path**
+  `metadataFromFirecrawl` was hardcoding `hasStructuredData: false` regardless of page content. Fixed by requesting the `html` format alongside `markdown` and `links` in the Firecrawl homepage fetch, then running the JSON-LD regex against the actual HTML. Interior page fetches unchanged (HTML format not requested there). The raw HTML fallback path (`extractPageMetadata`) was already correct.
+  _Status: Shipped — `app/api/audit/route.ts`_
+
+- [x] **JS-rendered navigation gap detection**
+  Sites using JavaScript-only nav menus produce near-zero link counts from static fetch — the pipeline would silently miss all interior pages and the technical agent had no visibility into this. Homepage link count is now injected into the technical agent context as a `## Navigation Signal` block. Technical agent prompt updated to flag suspiciously low link counts (< 5) as a data caveat when other site signals contradict it.
+  _Status: Shipped — `app/api/audit/route.ts`, `lib/agents.ts`_
+
+- [x] **Technical agent output token ceiling**
+  The technical agent has the most complex output schema (6 dimensions + pagespeed object + seo_quick_wins + technical_issues + tracking_status + biggest_lever). With richer input context (keywordsContext + Navigation Signal added this session), 2048 tokens was insufficient for content-rich sites, producing truncated JSON that silently rendered as a blank tab. Bumped to 3072 for technical only.
+  _Status: Shipped — `app/api/audit/route.ts`_
+
 - [x] **Connected data enrichment** — GA4 + GSC depth pass
   Wire up the full set of freely available metrics from both APIs: GA4 conversions by channel, device breakdown, per-page engagement quality, avg engagement time, top events. GSC index coverage (already stubbed), query trend vs. prior 30 days. No new OAuth scopes required. Prerequisite for meaningful conversion agent scoring and executive summary synthesis.
   _Status: Shipped — `lib/gsc-ga4.ts` interfaces, fetch functions, and formatters updated; conversion agent prompt updated to reference GA4 conversion + events data_
@@ -99,13 +112,6 @@
   Fetches up to 3 interior pages per audit. Links extracted from homepage HTML, scored against `PAGE_CONFIG` patterns (pricing, about, services, contact, process, case-studies), top 3 fetched in parallel with 4s timeout and 3k char truncation. Each page routed to the agents it benefits — technical agent excluded. `pagesAnalyzed` logged to JSONB payload and surfaced in the Data Sources panel.
   _Status: Shipped — `extractLinks`, `selectInteriorPages`, `fetchInteriorPage` in `app/api/audit/route.ts`_
 
-- [ ] **Dynamic pre-audit questionnaire** — AI-generated business context step
-  Before launching the 5-agent audit, run a lightweight "discovery" pass on the homepage: infer business model, identify ambiguities the agents would otherwise have to guess at (pricing model, sales motion, target buyer, conversion goal), and generate 3–5 targeted questions specific to what the page actually shows. Surface those questions in the UI as an editable form — user confirms or edits, then hits Run. Answers get injected as `additionalContext` into all 5 agents. This replaces inference with knowledge for the highest-leverage inputs. A static fallback form (generic business context questions) is a simpler interim option if the AI-generated approach is deferred.
-  
-  The questionnaire becomes meaningfully sharper when multi-page crawl is available — the discovery agent has seen /about, /pricing, /services rather than just the homepage, so its hypotheses are better grounded. Sequencing: multi-page crawl first, then this.
-  
-  Token cost note: one additional lightweight LLM call before the main audit run. Negligible relative to the 5-agent payload, but adds a round-trip of latency (mitigated by the fact that user is filling out the form during that time).
-  _Effort: M | Impact: H | Priority: High — directly addresses the core "no business context" gap; makes audit findings more credible and specific_
 
 ---
 
@@ -135,8 +141,8 @@
   Full report is the shareable, unguessable UUID URL. Jude holds it and sends it to the prospect at his timing. Discord completion embed now includes a direct "Report" field linking to the `/audit/{id}` URL for immediate access.
   _Status: Shipped_
 
-- [ ] **`/audit/[id]` full report design**
-  The `/audit/[id]` page (`AuditReport.tsx`) is the canonical full-report surface. Needs a design pass to match the product's visual quality — currently functional but not polished. `logs/viewer.html` is the reference baseline for data rendering. Should show all five agent dimensions, executive summary, quick wins, before/afters, and the Professional tier data sources badge when DataForSEO was active.
+- [x] **`/audit/[id]` full report design**
+  The `/audit/[id]` page (`AuditReport.tsx`) is the canonical full-report surface. Needs a design pass to match the product's visual quality — currently functional but not polished. `logs/viewer.html` is the reference baseline for data rendering. Should show all five agent dimensions, executive summary, quick wins, before/afters.
   _Effort: M | Impact: H | Priority: High — this is what the prospect sees_
 
 - [ ] **Side-by-side competitor audit**

@@ -16,6 +16,7 @@ export interface Ga4Data {
   bounceRate: number | null
   newVsReturning: { new: number; returning: number } | null
   conversionsByChannel: Array<{ channel: string; conversions: number; sessions: number; conversionRate: number }> | null
+  conversionsBySourceMedium: Array<{ sourceMedium: string; conversions: number; sessions: number; conversionRate: number }> | null
   sessionsByDevice: Array<{ device: string; sessions: number; engagementRate: number }> | null
   avgEngagementTime: number | null
   topEvents: Array<{ event: string; count: number }> | null
@@ -266,7 +267,7 @@ export async function fetchGa4Data(propertyId: string): Promise<Ga4Data | null> 
     const endDate = 'today'
     const startDate = '90daysAgo'
 
-    const [channelRes, pagesRes, newReturnRes, conversionsByChannelRes, deviceRes, engagementTimeRes, eventsRes] = await Promise.allSettled([
+    const [channelRes, pagesRes, newReturnRes, conversionsByChannelRes, conversionsBySourceMediumRes, deviceRes, engagementTimeRes, eventsRes] = await Promise.allSettled([
       // Sessions by channel
       analyticsData.properties.runReport({
         property: `properties/${propertyId}`,
@@ -306,6 +307,17 @@ export async function fetchGa4Data(propertyId: string): Promise<Ga4Data | null> 
           metrics: [{ name: 'conversions' }, { name: 'sessions' }],
           orderBys: [{ metric: { metricName: 'conversions' }, desc: true }],
           limit: '10',
+        },
+      }),
+      // Conversions by source / medium (query-to-conversion chain)
+      analyticsData.properties.runReport({
+        property: `properties/${propertyId}`,
+        requestBody: {
+          dateRanges: [{ startDate, endDate }],
+          dimensions: [{ name: 'sessionSourceMedium' }],
+          metrics: [{ name: 'conversions' }, { name: 'sessions' }],
+          orderBys: [{ metric: { metricName: 'conversions' }, desc: true }],
+          limit: '20',
         },
       }),
       // Device category breakdown
@@ -402,6 +414,21 @@ export async function fetchGa4Data(propertyId: string): Promise<Ga4Data | null> 
           .filter((r) => r.conversions > 0)
       : null
 
+    const conversionsBySourceMedium: Ga4Data['conversionsBySourceMedium'] = conversionsBySourceMediumRes.status === 'fulfilled'
+      ? (conversionsBySourceMediumRes.value.data.rows ?? [])
+          .map((r) => {
+            const conversions = parseFloat(r.metricValues?.[0]?.value ?? '0')
+            const sessions = parseInt(r.metricValues?.[1]?.value ?? '0', 10)
+            return {
+              sourceMedium: r.dimensionValues?.[0]?.value ?? 'Unknown',
+              conversions: Math.round(conversions),
+              sessions,
+              conversionRate: sessions > 0 ? Math.round((conversions / sessions) * 10000) / 100 : 0,
+            }
+          })
+          .filter((r) => r.conversions > 0)
+      : null
+
     const sessionsByDevice: Ga4Data['sessionsByDevice'] = deviceRes.status === 'fulfilled'
       ? (deviceRes.value.data.rows ?? []).map((r) => ({
           device: r.dimensionValues?.[0]?.value ?? 'Unknown',
@@ -433,6 +460,7 @@ export async function fetchGa4Data(propertyId: string): Promise<Ga4Data | null> 
       bounceRate,
       newVsReturning,
       conversionsByChannel,
+      conversionsBySourceMedium,
       sessionsByDevice,
       avgEngagementTime,
       topEvents,
@@ -525,6 +553,15 @@ export function formatGa4Context(ga4: Ga4Data): string {
     })
   } else if (ga4.conversionsByChannel !== null) {
     lines.push('\n**Conversions:** No conversion events recorded — conversion tracking may not be configured.')
+  }
+
+  if (ga4.conversionsBySourceMedium && ga4.conversionsBySourceMedium.length > 0) {
+    lines.push('\n### Conversions by Source / Medium')
+    lines.push('| Source / Medium | Sessions | Conversions | CVR% |')
+    lines.push('|---|---|---|---|')
+    ga4.conversionsBySourceMedium.forEach((c) => {
+      lines.push(`| ${c.sourceMedium} | ${c.sessions.toLocaleString()} | ${c.conversions.toLocaleString()} | ${c.conversionRate}% |`)
+    })
   }
 
   if (ga4.topPages && ga4.topPages.length > 0) {

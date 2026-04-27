@@ -66,6 +66,7 @@ interface FirecrawlResult {
   markdown: string
   metadata: FirecrawlMetadata
   links: string[]
+  html?: string
 }
 
 interface PageAnalyzed {
@@ -142,21 +143,22 @@ function scoreLink(path: string): { score: number; agents: AgentKey[] } | null {
   return null
 }
 
-async function firecrawlFetch(url: string, timeout = 8000): Promise<FirecrawlResult | null> {
+async function firecrawlFetch(url: string, timeout = 8000, includeHtml = false): Promise<FirecrawlResult | null> {
   const apiKey = process.env.FIRECRAWL_API_KEY
   if (!apiKey) return null
   try {
+    const formats = includeHtml ? ['markdown', 'links', 'html'] : ['markdown', 'links']
     const res = await fetch('https://api.firecrawl.dev/v2/scrape', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, formats: ['markdown', 'links'], maxAge: 0 }),
+      body: JSON.stringify({ url, formats, maxAge: 0 }),
       signal: AbortSignal.timeout(timeout),
     })
     if (!res.ok) return null
-    const data = await res.json() as { success: boolean; data?: { markdown?: string; metadata?: FirecrawlMetadata; links?: string[] } }
+    const data = await res.json() as { success: boolean; data?: { markdown?: string; metadata?: FirecrawlMetadata; links?: string[]; html?: string } }
     if (!data.success || !data.data) return null
     const markdown = (data.data.markdown ?? '').replace(/!\[.*?\]\(.*?\)\n?/g, '')
-    return { markdown, metadata: data.data.metadata ?? {}, links: data.data.links ?? [] }
+    return { markdown, metadata: data.data.metadata ?? {}, links: data.data.links ?? [], html: data.data.html }
   } catch {
     return null
   }
@@ -180,7 +182,7 @@ function filterSameDomainLinks(links: string[], baseUrl: string): string[] {
   return result
 }
 
-function metadataFromFirecrawl(meta: FirecrawlMetadata, markdown: string): PageMetadata {
+function metadataFromFirecrawl(meta: FirecrawlMetadata, markdown: string, html?: string): PageMetadata {
   const h1s = markdown.split('\n')
     .filter(line => /^# /.test(line))
     .map(line => line.replace(/^# /, '').trim())
@@ -192,7 +194,7 @@ function metadataFromFirecrawl(meta: FirecrawlMetadata, markdown: string): PageM
     canonical: meta.canonical ?? meta.sourceURL ?? null,
     h1s,
     wordCount,
-    hasStructuredData: false,
+    hasStructuredData: html ? /<script[^>]+type=["']application\/ld\+json["']/i.test(html) : false,
     hasOgTags: 'og:title' in meta || 'og:description' in meta,
     metaRobots: meta.robots ?? null,
     generator: meta.generator ?? null,
@@ -344,10 +346,10 @@ async function fetchPageContent(url: string): Promise<{ content: string; metadat
     h1s: [], wordCount: 0, hasStructuredData: false, hasOgTags: false, metaRobots: null,
   }
 
-  const fc = await firecrawlFetch(url, 10000)
+  const fc = await firecrawlFetch(url, 10000, true)
   if (fc) {
     const content = fc.markdown.slice(0, 15000)
-    const metadata = metadataFromFirecrawl(fc.metadata, fc.markdown)
+    const metadata = metadataFromFirecrawl(fc.metadata, fc.markdown, fc.html)
     const links = filterSameDomainLinks(fc.links, url)
     return { content, metadata, links }
   }
@@ -492,9 +494,14 @@ ${pageContent}
 
 Provide your analysis as a JSON object only. No explanation, no markdown, no code blocks — just the raw JSON.`
 
+  // Technical agent has the most complex output schema (6 dimensions + pagespeed object +
+  // seo_quick_wins + technical_issues array + tracking_status array + biggest_lever).
+  // With richer input context (keywords, navigation signal), 2048 tokens can truncate mid-JSON.
+  const maxTokens = agentKey === 'technical' ? 3072 : 2048
+
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
-    max_tokens: 2048,
+    max_tokens: maxTokens,
     temperature: 0.2,
     system: agent.systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
@@ -791,14 +798,14 @@ export async function GET(request: Request) {
           .then((r) => r.json() as Promise<{ gscContext: string | null; ga4Context: string | null }>)
           .catch(() => ({ gscContext: null, ga4Context: null })),
         fetch(`${origin}/api/competitive-data?siteUrl=${encodeURIComponent(targetUrl)}`)
-          .then((r) => r.json() as Promise<{ rankContext: string | null; competitorsContext: string | null }>)
-          .catch(() => ({ rankContext: null, competitorsContext: null })),
+          .then((r) => r.json() as Promise<{ rankContext: string | null; competitorsContext: string | null; keywordsContext: string | null }>)
+          .catch(() => ({ rankContext: null, competitorsContext: null, keywordsContext: null })),
       ])
       const { content: pageContent, metadata: pageMetadata, links: homepageLinks } = pageData
       const { gscContext, ga4Context } = connectedData
-      const { rankContext, competitorsContext } = competitiveData
+      const { rankContext, competitorsContext, keywordsContext } = competitiveData
       const isConnected = gscContext !== null || ga4Context !== null
-      const isCompetitive = rankContext !== null || competitorsContext !== null
+      const isCompetitive = rankContext !== null || competitorsContext !== null || keywordsContext !== null
 
       // Select and fetch interior pages (after homepage, before agents launch)
       const selectedPages = selectInteriorPages(homepageLinks)
@@ -865,17 +872,20 @@ export async function GET(request: Request) {
       const GA4_AGENTS = new Set(['technical', 'strategy', 'content', 'conversion'])
       const RANK_AGENTS = new Set(['technical', 'strategy', 'competitive'])
       const COMPETITORS_AGENTS = new Set(['competitive', 'strategy', 'content'])
+      const KEYWORDS_AGENTS = new Set(['technical', 'strategy'])
 
       const promises = agentKeys.map(async (key) => {
         const parts: (string | null)[] = [businessContextParts]
         if (key === 'technical') {
           parts.push(pageSpeed ? formatPageSpeedContext(pageSpeed) : null)
           parts.push(crawlData || null)
+          parts.push(`## Navigation Signal\nLinks extracted from homepage: ${homepageLinks.length}`)
         }
         if (gscContext && GSC_AGENTS.has(key)) parts.push(gscContext)
         if (ga4Context && GA4_AGENTS.has(key)) parts.push(ga4Context)
         if (rankContext && RANK_AGENTS.has(key)) parts.push(rankContext)
         if (competitorsContext && COMPETITORS_AGENTS.has(key)) parts.push(competitorsContext)
+        if (keywordsContext && KEYWORDS_AGENTS.has(key)) parts.push(keywordsContext)
         // Append interior page content for pages routed to this agent
         for (const page of fetchedInteriorPages) {
           if (page.agents.includes(key)) {

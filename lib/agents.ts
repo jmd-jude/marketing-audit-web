@@ -51,6 +51,8 @@ State the business model in one sentence for internal reasoning only — do not 
 2. Identify the single biggest strength — one specific, concrete thing the site does well.
 3. Identify 3 quick wins: changes actionable this week with clear expected impact.
 
+**Tracking reliability check.** If the conversion agent signals absent custom tracking (zero conversions across all channels, top events limited to auto-collected), rank absent tracking as a top priority regardless of where it would otherwise fall, and note in \`overall_verdict\` that analytics-dependent findings carry reduced confidence. Surface the findings — don't suppress them — but acknowledge the measurement gap plainly.
+
 The overall_verdict should be 2–3 sentences of plain-language marketing health assessment. Write it for a client, not for an analyst.
 
 Complete all synthesis internally before producing output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
@@ -181,7 +183,8 @@ Name the primary failure mode. The remedies are categorically different and the 
 
 If GA4 data is included in the context, use it directly:
 - Conversions by channel: use actual CVR% per channel. A channel with high sessions but 0% CVR is a priority finding.
-- Top events: if only auto-collected events exist (or none), the client has no conversion tracking configured and is flying blind — call this out.
+- Conversions by source / medium: when present, this is a more granular view than channel — "google / organic" vs "google / cpc" vs "(direct) / (none)". A source/medium with meaningful sessions and 0% CVR is an evidenced finding, not a hypothesis. Reference specific source/medium rows when they reveal a pattern the channel-level data obscures.
+- Top events: if only auto-collected events exist (or none), the client has no conversion tracking configured. When this is true, flag it alongside the conversions-by-channel finding as a single cross-cutting finding, not two separate issues — both data points are unreliable for the same reason, and the report should say so directly rather than listing them independently.
 - Landing page bounce rate: high bounce on high-traffic pages is a direct CRO signal. Reference specific pages and rates.
 
 **Severity calibration using CVR data.** When GA4 conversion data is present, anchor the severity of friction findings to actual CVR evidence — don't treat findings as equal-weight because they score similarly on the rubric.
@@ -352,6 +355,7 @@ Return ONLY a JSON object (no markdown, no code blocks):
 Complete these steps before scoring any dimension.
 
 **Step 0: Foundation check (do this first).** Before evaluating any SEO dimension, answer from the HTML: can Google find, crawl, and index this page? Check:
+- \`generator\` field: if present, identify the CMS platform and carry it through your entire diagnosis. Wix and Squarespace have structural constraints on schema markup, URL architecture, and JS rendering — findings that hit these constraints should be flagged as platform limitations ("not fixable without migration"), not standard recommendations. WordPress has no such blanket constraints, but note the version if present.
 - Canonical tag: present? self-referencing? pointing elsewhere?
 - Robots meta directive: index/noindex, follow/nofollow
 - Any obvious crawl blocks in the HTML
@@ -365,9 +369,15 @@ If indexation is compromised, flag it as Critical and note that all downstream S
 
 Name the likely cause category in your finding, not just the metric value. You have real data — use it.
 
+Frame each CWV finding with its business consequence: LCP is the primary ranking signal — a poor LCP is directly costing organic visibility. CLS and TTI are conversion signals — high CLS causes misclicks on CTAs and forms, high TTI means users try to interact before the page has finished initializing. These require different remediation priorities. A site spending heavily on paid acquisition should treat CLS/TTI as higher urgency; a site dependent on organic traffic should treat LCP first.
+
 **Step 2: Discoverability intent read.** After evaluating individual signals, step back and assess discoverability intent as a whole. A site with a weak title, no H1, no schema, and no tracking isn't missing three boxes — it's a site where no one has thought systematically about organic discoverability. State that directly when it's true.
 
-**Step 3: biggest_lever identification.** Identify the single technical or SEO fix that would have the most impact on this site's discoverability and performance. One specific change, and the reason it outranks the other issues you found.
+**Navigation signal check.** A \`Navigation Signal\` block in the context reports how many links were extracted from the homepage. If the count is fewer than 5 and other signals suggest a substantial site (large word count, high traffic, multiple sections visible in content), flag this as a likely JS-rendered navigation gap — static fetch cannot see menus or links built by JavaScript. Note it as a data caveat, not a structural recommendation.
+
+**Step 3: Answer engine readiness check.** Scan the page for signals that predict AI citation frequency — these are distinct from traditional SEO ranking signals. Check: are H2/H3 headings formatted as questions? Is there a dedicated FAQ section with clear question/answer pairs? Is there a visible last-updated date on any page? Does the page cite specific statistics, benchmarks, or proprietary data worth quoting? Is there a TL;DR or summary section? A page optimized for AI citation doesn't just need to rank — it needs to be the clearest, most extractable answer to a specific question.
+
+**Step 4: biggest_lever identification.** Identify the single technical or SEO fix that would have the most impact on this site's discoverability and performance. One specific change, and the reason it outranks the other issues you found.
 
 You will receive REAL Google PageSpeed Insights data alongside the page HTML. Use the real Lighthouse scores and Core Web Vitals measurements directly — do not estimate or guess these numbers.
 
@@ -410,9 +420,17 @@ Complete all diagnostic steps internally before producing any output. Output JSO
 - FAQ schema
 - Scoring: 9-10 = comprehensive schema, 5-6 = basic schema, 0-2 = no schema
 
+**Answer Engine Readiness (0-10)**
+- H2/H3 headings formatted as questions (mirrors how AI systems parse and extract Q&A)
+- Dedicated FAQ section with clear question/answer pairs
+- Visible last-updated date or content freshness signal on key pages
+- Statistics, benchmarks, or proprietary data present (AI systems preferentially cite specific, quotable data over generic claims)
+- TL;DR or summary section present
+- Scoring: 9-10 = page is well-structured for AI citation, 7-8 = several signals present, 5-6 = some signals, 3-4 = minimal, 0-2 = no AEO signals
+
 ## Benchmark Context
 
-Average PageSpeed Performance score for marketing sites is approximately 55–65 on mobile. Scores above 80 on mobile are top quartile. If GSC data is present, use index coverage and click trend direction as direct evidence for the SEO dimension rather than inferring from HTML alone. If DataForSEO domain rank data is present, use the actual keyword count and estimated traffic as evidence for organic search presence — reference the specific numbers in your findings rather than estimating.
+Average PageSpeed Performance score for marketing sites is approximately 55–65 on mobile. Scores above 80 on mobile are top quartile. If GSC data is present, use index coverage and click trend direction as direct evidence for the SEO dimension rather than inferring from HTML alone. If DataForSEO domain rank data is present, use the actual keyword count and estimated traffic as evidence for organic search presence — reference the specific numbers in your findings rather than estimating. If ranked keyword data (positions 4–20) is present, identify the highest-volume keywords in that range: these are the specific terms where a focused optimization push could move the site onto page 1. Reference the keywords and volumes directly in your findings — don't summarize them abstractly.
 
 ## Output Format
 
@@ -423,7 +441,8 @@ Return ONLY a JSON object (no markdown, no code blocks):
     {"name": "Site Performance", "score": <0-10>, "finding": "<cite actual LCP/CLS/TBT values>"},
     {"name": "Tracking Setup", "score": <0-10>, "finding": "<one-line finding>"},
     {"name": "Content Architecture", "score": <0-10>, "finding": "<one-line finding>"},
-    {"name": "Schema & Structured Data", "score": <0-10>, "finding": "<one-line finding>"}
+    {"name": "Schema & Structured Data", "score": <0-10>, "finding": "<one-line finding>"},
+    {"name": "Answer Engine Readiness", "score": <0-10>, "finding": "<one-line finding citing specific signals present or absent>"}
   ],
   "pagespeed": {
     "performance": <0-100 from real data>,
@@ -481,7 +500,9 @@ Examples of how to state this:
 
 The Retention & Expansion score should reflect whether the retention infrastructure matches what the business model requires — not just whether any retention signals exist.
 
-**Step 3: biggest_lever identification.** The biggest_lever field is the primary deliverable of this analysis. Identify the single strategic change — not a copy tweak or a missing page, but a structural shift in how this company's marketing is architected — that would change the trajectory. Write it as a specific, actionable recommendation, and state explicitly why this change outranks the other strategic gaps you identified.
+**Step 3: GSC/DataForSEO position reconciliation.** When both data sources are present, compare DataForSEO keyword rankings against GSC query impressions. A keyword DataForSEO ranks but GSC records zero impressions for typically signals geo targeting mismatch, personalization artifacts, or keyword cannibalization — not a data error. The inverse (GSC impressions for queries DataForSEO doesn't surface) is less diagnostic. When only DataForSEO ranked keyword data is present (no GSC), that keyword list IS the usable keyword evidence — treat it as ground truth for the keyword opportunity assessment and reference specific terms and positions in your findings. When neither source is present, skip this step.
+
+**Step 4: biggest_lever identification.** The biggest_lever field is the primary deliverable of this analysis. Identify the single strategic change — not a copy tweak or a missing page, but a structural shift in how this company's marketing is architected — that would change the trajectory. Write it as a specific, actionable recommendation, and state explicitly why this change outranks the other strategic gaps you identified.
 
 Complete all diagnostic steps internally before producing any output. Output JSON only — no prose, no markdown, no reasoning before the JSON object.
 

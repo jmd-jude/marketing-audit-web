@@ -28,19 +28,18 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `app/api/audit/route.ts` | Edge API route — fetches page content via Firecrawl (or raw HTML fallback) + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
 | `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
-| `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data (domain rank overview + competitors), returns formatted context strings |
+| `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data: `domain_rank_overview/live`, `competitors_domain/live`, `ranked_keywords/live` (positions 4–20, sorted by volume desc). Returns `{ rankContext, competitorsContext, keywordsContext }`. |
 | `app/api/gate/route.ts` | Node runtime route — receives email capture from gate card, fires Discord with pre-built `?full=1` URL |
 | `app/api/admin/audits/route.ts` | Node runtime route — internal admin access to audit records |
 | `app/api/auth/` | Stubbed OAuth routes (410 Gone) — no longer active, kept to avoid 404s |
 | `app/sample/page.tsx` | Server component — renders a pre-unlocked full report using `SAMPLE_AUDIT_ID`; 404 if env var unset |
 | `lib/agents.ts` | All 5 agent system prompts + weights config |
 | `lib/gsc-ga4.ts` | Service account auth, GSC + GA4 API calls, GA4 property discovery, context formatters |
-| `components/DataSourcesPanel.tsx` | Data sources tier UI (active / available / roadmap) |
 | `scripts/setup-db.ts` | One-time Neon table creation |
 | `scripts/test-dataforseo.ts` | Utility for debugging DataForSEO API calls |
 | `logs/viewer.html` | Internal audit explorer — load audit-data.jsonl to page through runs |
 | `public/job-xray.html` | Internal per-agent inspector — tabs for Analyst Job, Data In (rendered markdown), Raw Output, Formatted Report |
-| `product-docs/ROADMAP.md` | Product backlog and tier model |
+| `product-docs/ROADMAP.md` | Product backlog |
 | `product-docs/ARCHITECTURE.md` | System architecture diagrams — current state, full vision, and direct mail parallel |
 
 ## How the Audit Works
@@ -80,9 +79,9 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `NEXT_PUBLIC_UNLOCK_CODES` | No | Deprecated — no longer used. Gate model changed to email capture + manual delivery. |
 | `SAMPLE_AUDIT_ID` | No | UUID of the audit to show at `/sample`. If unset, `/sample` returns 404. |
 | `DATABASE_URL` | Yes (for persistence) | Neon Postgres pooled connection string. |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Connected tier | Full JSON key file contents (paste as one line). Service account in GCP `marketing-audit` project. |
-| `DATAFORSEO_LOGIN` | Professional tier | DataForSEO API login (from dashboard, not account password). |
-| `DATAFORSEO_PASSWORD` | Professional tier | DataForSEO API password. |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | When Google APIs connected | Full JSON key file contents (paste as one line). Service account in GCP `marketing-audit` project. |
+| `DATAFORSEO_LOGIN` | When DataForSEO connected | DataForSEO API login (from dashboard, not account password). |
+| `DATAFORSEO_PASSWORD` | When DataForSEO connected | DataForSEO API password. |
 | `FIRECRAWL_API_KEY` | Recommended | Firecrawl API key. When set, replaces raw HTML fetch with clean markdown + structured metadata for homepage and interior pages. Falls back to raw fetch if unset. |
 
 ## Development
@@ -100,8 +99,8 @@ npx tsx scripts/test-dataforseo.ts  # debug DataForSEO API calls
 Data source provenance is surfaced lightly in the report via the "What We Analyzed" section.
 
 **Standard:** Page content (Firecrawl markdown when key present, raw HTML fallback) + PageSpeed Insights — always runs, no auth  
-**Connected (shipped):** GA4 + Search Console via service account — always-on, no session required. Data loads automatically when access has been granted.  
-**Professional (shipped — Labs only):** DataForSEO domain rank overview + competitors domain via `/api/competitive-data`. `rankContext` → technical + strategy agents. `competitorsContext` → competitive + strategy agents. Backlinks API deprioritized (requires $100 minimum commitment). Graceful degradation if credentials missing.  
+**Connected (shipped):** GA4 + Search Console via service account — always-on, no session required. Data loads automatically when access has been granted. GA4 now includes `conversionsBySourceMedium` (sessionSourceMedium dimension + conversion metrics) in addition to the channel-level conversions.  
+**Professional (shipped — Labs only):** Three parallel DataForSEO Labs endpoints via `/api/competitive-data`: `domain_rank_overview/live` (organic traffic, keyword counts, momentum), `competitors_domain/live` (top 10 competitors by keyword overlap), and `ranked_keywords/live` (positions 4–20, top 25 by search volume). `rankContext` → technical + strategy + competitive agents. `competitorsContext` → competitive + strategy + content agents. `keywordsContext` → technical + strategy agents. Backlinks API deprioritized (requires $100 minimum commitment). Graceful degradation if credentials missing.  
 **Agency (roadmap):** SEMrush/Ahrefs, Klaviyo, Meta Ads API, if not available at dataforseo
 
 See `product-docs/ROADMAP.md` for full backlog.
@@ -110,7 +109,7 @@ See `product-docs/ROADMAP.md` for full backlog.
 
 - **Model:** A GCP service account (`digital-audit@marketing-audit-492917.iam.gserviceaccount.com`) authenticates to Google APIs. No OAuth flow, no session cookies, no user-facing connect step.
 - **Client setup:** Client adds the service account email as a Viewer on their GA4 property (Admin → Account Access Management) and as a Full User on their Search Console property (Settings → Users and Permissions). One-time, takes 2 minutes.
-- **Always-on:** The audit route always calls `/api/connected-data`. If the service account has access to the audited URL's property, data comes back and enriches the audit. If not, the route returns `{ gscContext: null, ga4Context: null }` and the audit runs Standard tier silently.
+- **Always-on:** The audit route always calls `/api/connected-data`. If the service account has access to the audited URL's property, data comes back and enriches the audit. If not, the route returns `{ gscContext: null, ga4Context: null }` and the audit runs without that data.
 - **Edge runtime constraint:** The audit route runs on Edge (required for SSE streaming). The `googleapis` SDK uses Node.js modules incompatible with Edge. GSC/GA4 fetching is delegated to `/api/connected-data` (Node runtime), which returns formatted strings the Edge audit route consumes.
 - **GA4 property discovery:** At request time, `discoverGa4PropertyId(domain)` lists all accessible GA4 properties and finds the best match. No stored session — discovery runs per audit.
 - **`connected` flag in SSE:** The `fetched` event sends `connected: true` only if gscContext or ga4Context was actually returned. `DataSourcesPanel` derives active/available state from this.
@@ -128,7 +127,7 @@ See `product-docs/ROADMAP.md` for full backlog.
 - `pagesAnalyzed` is included in the `fetched` SSE event and in the `writeAuditLog` payload (queryable via `payload->'pagesAnalyzed'` in Postgres). The Data Sources panel surfaces fetched page paths when expanded.
 - www/non-www mismatch in hrefs is handled in `filterSameDomainLinks` (Firecrawl path) and `extractLinks` (fallback path) — both normalize by stripping `www.` before comparing hostnames.
 - Discord has two events: `notifyDiscordStart` (fires before fetch, includes name + company + URL) and `notifyDiscord` (fires after completion, includes score + tokens). Both are fire-and-forget — never block the SSE stream on either.
-- The audit route always calls `/api/connected-data?siteUrl=...` before launching agents. The response is `{ gscContext: string | null, ga4Context: string | null }`. GSC context goes to `technical`, `strategy`, `competitive`, `content` agents. GA4 context goes to all five.
+- The audit route always calls `/api/connected-data?siteUrl=...` before launching agents. The response is `{ gscContext: string | null, ga4Context: string | null }`. GSC context goes to `technical`, `strategy`, `competitive`, `content` agents. GA4 context goes to all five. GA4 context includes `conversionsBySourceMedium` (source/medium grain conversion chain) when conversions exist.
 - Token usage is tracked per-agent via `message.usage` and aggregated into the `complete` SSE event. Displayed in the run stats bar and Discord embed.
 - `extractPageMetadata` is used only on the raw HTML fallback path. On the Firecrawl path, `metadataFromFirecrawl` maps the Firecrawl metadata response to `PageMetadata` — H1s are parsed from markdown headings, word count from the markdown body, `generator` field carries CMS detection (e.g. "Wix.com Website Builder").
 - Name and company are passed as query params (`?name=&company=`). Company is optional; name is required by the UI but defaults to `'Unknown'` server-side if missing.
