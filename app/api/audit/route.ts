@@ -494,10 +494,9 @@ ${pageContent}
 
 Provide your analysis as a JSON object only. No explanation, no markdown, no code blocks — just the raw JSON.`
 
-  // Technical agent has the most complex output schema (6 dimensions + pagespeed object +
-  // seo_quick_wins + technical_issues array + tracking_status array + biggest_lever).
-  // With richer input context (keywords, navigation signal), 2048 tokens can truncate mid-JSON.
-  const maxTokens = agentKey === 'technical' ? 3072 : 2048
+  // Conversion agent output (funnel_leaks + ab_tests + dimensions) can exceed 2048 tokens.
+  // Technical agent has the most complex schema — both get 3072.
+  const maxTokens = (agentKey === 'technical' || agentKey === 'conversion') ? 3072 : 2048
 
   const message = await client.messages.create({
     model: (process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6') as string,
@@ -510,7 +509,10 @@ Provide your analysis as a JSON object only. No explanation, no markdown, no cod
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
   console.log(`[agent:${agentKey}] stop_reason=${message.stop_reason} in=${message.usage.input_tokens} out=${message.usage.output_tokens}${additionalContext ? ` context=${additionalContext.length}chars` : ''}`)
 
-  const cleaned = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
+  // Strip fences, then extract outermost JSON object to handle any stray prose
+  const fenceStripped = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
+  const jsonMatch = fenceStripped.match(/\{[\s\S]*\}/)
+  const cleaned = jsonMatch ? jsonMatch[0] : fenceStripped
 
   let result: Record<string, unknown>
   try {
