@@ -26,7 +26,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `app/audit/[id]/page.tsx` | Server component — fetches audit row from Neon by UUID, passes to client |
 | `app/audit/[id]/AuditReport.tsx` | Client component — renders shareable report page (canonical full-report destination) |
 | `app/api/audit/route.ts` | Edge API route — fetches page content via Firecrawl (or raw HTML fallback) + PageSpeed + interior pages, runs 5 agents in parallel via SSE |
-| `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres |
+| `app/api/log/route.ts` | Node runtime route — writes to audit.log, audit-data.jsonl, and Neon Postgres; also fires the Discord completion embed (moved here from the Edge route so it can be properly awaited) |
 | `app/api/connected-data/route.ts` | Node runtime route — fetches GSC + GA4 data using service account auth, returns formatted context strings |
 | `app/api/competitive-data/route.ts` | Node runtime route — fetches DataForSEO Labs data: `domain_rank_overview/live`, `competitors_domain/live`, `ranked_keywords/live` (positions 4–20, sorted by volume desc). Returns `{ rankContext, competitorsContext, keywordsContext }`. |
 | `app/api/gate/route.ts` | Node runtime route — receives email capture from gate card, fires Discord with pre-built `?full=1` URL |
@@ -79,7 +79,7 @@ A Next.js web app that wraps AI marketing analysis in a browser UI, abstracting 
 | `NEXT_PUBLIC_UNLOCK_CODES` | No | Deprecated — no longer used. Gate model changed to email capture + manual delivery. |
 | `SAMPLE_AUDIT_ID` | No | UUID of the audit to show at `/sample`. If unset, `/sample` returns 404. |
 | `DATABASE_URL` | Yes (for persistence) | Neon Postgres pooled connection string. |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | When Google APIs connected | Full JSON key file contents (paste as one line). Service account in GCP `marketing-audit` project. |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | When Google APIs connected | Full JSON key file contents as a **single line** — use `python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)))" < key.json` to collapse the file before pasting. Literal newlines in the value break `JSON.parse`. Service account in GCP `marketing-audit` project. |
 | `DATAFORSEO_LOGIN` | When DataForSEO connected | DataForSEO API login (from dashboard, not account password). |
 | `DATAFORSEO_PASSWORD` | When DataForSEO connected | DataForSEO API password. |
 | `FIRECRAWL_API_KEY` | Recommended | Firecrawl API key. When set, replaces raw HTML fetch with clean markdown + structured metadata for homepage and interior pages. Falls back to raw fetch if unset. |
@@ -126,7 +126,7 @@ See `product-docs/ROADMAP.md` for full backlog.
 - Interior page fetches use `Promise.allSettled` with an 8s timeout per page (bumped from 4s to accommodate Firecrawl headless rendering). A timeout or error on any page doesn't fail the audit — that page simply doesn't contribute. Zero interior pages is a valid outcome.
 - `pagesAnalyzed` is included in the `fetched` SSE event and in the `writeAuditLog` payload (queryable via `payload->'pagesAnalyzed'` in Postgres). The Data Sources panel surfaces fetched page paths when expanded.
 - www/non-www mismatch in hrefs is handled in `filterSameDomainLinks` (Firecrawl path) and `extractLinks` (fallback path) — both normalize by stripping `www.` before comparing hostnames.
-- Discord has two events: `notifyDiscordStart` (fires before fetch, includes name + company + URL) and `notifyDiscord` (fires after completion, includes score + tokens). Both are fire-and-forget — never block the SSE stream on either.
+- Discord has two events: `notifyDiscordStart` (fires before fetch from the Edge route, includes name + company + URL) and the completion embed (fires from `/api/log` Node route after the Neon write, includes score + tokens + report link). The completion embed was moved out of the Edge route because Vercel terminates the Edge execution context when the stream closes, killing any in-flight outbound requests. The gate route (`/api/gate`) also fires Discord on email capture — that fetch must be `await`ed before the 204 returns or the serverless function exits before it completes.
 - The audit route always calls `/api/connected-data?siteUrl=...` before launching agents. The response is `{ gscContext: string | null, ga4Context: string | null }`. GSC context goes to `technical`, `strategy`, `competitive`, `content` agents. GA4 context goes to all five. GA4 context includes `conversionsBySourceMedium` (source/medium grain conversion chain) when conversions exist.
 - Token usage is tracked per-agent via `message.usage` and aggregated into the `complete` SSE event. Displayed in the run stats bar and Discord embed.
 - `extractPageMetadata` is used only on the raw HTML fallback path. On the Firecrawl path, `metadataFromFirecrawl` maps the Firecrawl metadata response to `PageMetadata` — H1s are parsed from markdown headings, word count from the markdown body, `generator` field carries CMS detection (e.g. "Wix.com Website Builder").

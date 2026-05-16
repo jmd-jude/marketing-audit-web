@@ -10,7 +10,7 @@ export function SiteFooter() {
           <span className="font-serif text-lr-ink text-sm tracking-tight">lanterne rouge</span>
         </div>
         <div className="flex items-center gap-6 text-xs text-lr-stone">
-          <span>© {new Date().getFullYear()} lanternerouge.io</span>
+          <span>© {new Date().getFullYear()} lanterne rouge</span>
         </div>
       </div>
     </footer>

@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 function fmtDate(ts: string) {
   try {
     return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -36,7 +38,7 @@ export function AuditHeader({
         gap: 20,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, textDecoration: 'none' }}>
         <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
           <circle cx="14" cy="14" r="11" fill="none" stroke="#C8313A" strokeWidth="1.8" />
           <circle cx="14" cy="14" r="4.5" fill="#C8313A" />
@@ -44,7 +46,7 @@ export function AuditHeader({
         <span className="font-serif text-lr-parchment" style={{ fontSize: 16, letterSpacing: '-0.2px', lineHeight: 1 }}>
           lanterne rouge
         </span>
-      </div>
+      </Link>
 
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {url && (
@@ -66,6 +68,14 @@ export function AuditHeader({
           </a>
         )}
       </div>
+
+      <Link
+        href="/"
+        className="text-lr-parchment/60 hover:text-lr-parchment transition-colors"
+        style={{ fontSize: 12, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}
+      >
+        Run a New Audit
+      </Link>
 
       {meta && (
         <div className="text-lr-stone" style={{ fontSize: 11, flexShrink: 0, textAlign: 'right', lineHeight: 1.6 }}>

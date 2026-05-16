@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         timestamp: new Date().toISOString(),
       }],
     }
-    fetch(webhookUrl, {
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(message),

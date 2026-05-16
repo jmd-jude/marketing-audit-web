@@ -110,5 +110,50 @@ export async function POST(request: Request) {
     }
   }
 
+  // Fire Discord completion notification from Node runtime so it can be properly awaited.
+  // The Edge audit route can't reliably fire outbound requests after closing its stream.
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+  if (webhookUrl && body.data) {
+    try {
+      const d = body.data as Record<string, unknown>
+      const agents = (d.agents as Array<{ key: string; score: number; inputTokens: number; outputTokens: number }>) ?? []
+      const totalIn = agents.reduce((s, a) => s + (a.inputTokens ?? 0), 0)
+      const totalOut = agents.reduce((s, a) => s + (a.outputTokens ?? 0), 0)
+      const origin = new URL(request.url).origin
+      const reportUrl = `${origin}/audit/${d.id as string}`
+      const scoreBar = (s: number) => '█'.repeat(Math.round(s / 10)) + '░'.repeat(10 - Math.round(s / 10))
+      const agentLines = agents
+        .map((a) => `\`${scoreBar(a.score)}\` **${a.score}** — ${a.key}`)
+        .join('\n')
+      const cost = ((totalIn * 3 + totalOut * 15) / 1_000_000).toFixed(4)
+      const duration = (((d.durationMs as number) ?? 0) / 1000).toFixed(1)
+      const compositeScore = d.compositeScore as number
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embeds: [{
+            title: 'Audit Complete',
+            url: d.url as string,
+            color: compositeScore >= 75 ? 0x16a34a : compositeScore >= 55 ? 0xca8a04 : 0xdc2626,
+            fields: [
+              { name: 'Auditor', value: (d.auditor as string) || 'Unknown', inline: true },
+              { name: 'Overall Score', value: `**${compositeScore}/100**`, inline: true },
+              { name: 'Duration', value: `${duration}s`, inline: true },
+              { name: 'Agent Scores', value: agentLines || 'n/a', inline: false },
+              { name: 'Token Usage', value: `↑ ${totalIn.toLocaleString()} in  ↓ ${totalOut.toLocaleString()} out`, inline: false },
+              { name: 'Cost', value: `$${cost}`, inline: true },
+              { name: 'Model', value: (d.model as string) || 'unknown', inline: true },
+              { name: 'Report', value: reportUrl, inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+          }],
+        }),
+      })
+    } catch (err) {
+      console.error('[log route] discord notify failed:', err)
+    }
+  }
+
   return new Response(null, { status: 204 })
 }

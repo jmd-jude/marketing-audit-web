@@ -1011,12 +1011,10 @@ export async function GET(request: Request) {
         model,
       })
 
-      // Close stream immediately so the browser receives the complete event
-      // without waiting on the Discord webhook call.
+      // Close stream immediately so the browser receives the complete event.
+      // Discord completion notification is fired by /api/log (Node runtime) after
+      // the Neon write — Edge runtime can't reliably fire outbound requests post-close.
       controller.close()
-
-      notifyDiscord({ name, company, url: targetUrl, reportUrl: `${origin}/audit/${auditId}`, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
-        .catch(() => { /* non-critical */ })
     },
   })
 
