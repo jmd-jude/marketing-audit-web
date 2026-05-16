@@ -1011,10 +1011,12 @@ export async function GET(request: Request) {
         model,
       })
 
-      await notifyDiscord({ name, company, url: targetUrl, reportUrl: `${origin}/audit/${auditId}`, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
-        .catch(() => { /* non-critical */ })
-
+      // Close stream immediately so the browser receives the complete event
+      // without waiting on the Discord webhook call.
       controller.close()
+
+      notifyDiscord({ name, company, url: targetUrl, reportUrl: `${origin}/audit/${auditId}`, compositeScore, scores, totalInputTokens, totalOutputTokens, model, durationMs, pageSpeed })
+        .catch(() => { /* non-critical */ })
     },
   })
 
