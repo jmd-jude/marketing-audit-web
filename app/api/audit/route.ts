@@ -789,6 +789,11 @@ export async function GET(request: Request) {
 
       send({ type: 'start', url: targetUrl, message: 'Fetching page content & PageSpeed data...' })
 
+      // Keep the SSE connection alive during long fetches — Vercel's edge proxy closes idle streams.
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(': heartbeat\n\n')) } catch { /* stream closed */ }
+      }, 10000)
+
       // Fetch HTML, PageSpeed, crawl data, GSC/GA4, and DataForSEO competitive data in parallel.
       // Both /api/connected-data and /api/competitive-data run on Node runtime to avoid Edge constraints.
       const origin = new URL(request.url).origin
@@ -831,6 +836,8 @@ export async function GET(request: Request) {
           pagesAnalyzed.push({ url: sel.path, status: 'error', chars: 0, agents: [] })
         }
       }
+
+      clearInterval(heartbeat)
 
       // Data pipeline visibility log
       console.log(`\n[audit] ── ${targetUrl} ──────────────────────`)
@@ -1022,7 +1029,6 @@ export async function GET(request: Request) {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
     },
   })
 }
