@@ -837,8 +837,6 @@ export async function GET(request: Request) {
         }
       }
 
-      clearInterval(heartbeat)
-
       // Data pipeline visibility log
       console.log(`\n[audit] ── ${targetUrl} ──────────────────────`)
       console.log(`[audit] HTML: ${pageContent.length} chars | PageSpeed: ${pageSpeed ? `perf=${pageSpeed.scores.performance}` : 'unavailable'} | crawl: ${crawlData ? `${crawlData.length} chars` : 'none'}`)
@@ -1017,6 +1015,8 @@ export async function GET(request: Request) {
         durationMs,
         model,
       })
+
+      clearInterval(heartbeat)
 
       // Close stream immediately so the browser receives the complete event.
       // Discord completion notification is fired by /api/log (Node runtime) after
