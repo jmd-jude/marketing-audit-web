@@ -951,8 +951,8 @@ function AgentSection({ agent }: { agent: D }) {
 
       <FormattedReport agent={agent} skipDimensions />
 
-      {/* Input brief — collapsed by default */}
-      <div className="mt-6 pt-4" style={{ borderTop: '0.5px solid var(--lr-border)' }}>
+      {/* Input brief — hidden from prospects; use job-xray.html for debugging */}
+      {/* <div className="mt-6 pt-4" style={{ borderTop: '0.5px solid var(--lr-border)' }}>
         <button
           onClick={() => setShowBrief(!showBrief)}
           className="text-[11px] font-semibold text-lr-stone hover:text-lr-ink transition-colors flex items-center gap-1.5"
@@ -981,7 +981,7 @@ function AgentSection({ agent }: { agent: D }) {
             </div>
           </div>
         )}
-      </div>
+      </div> */}
     </div>
   )
 }
